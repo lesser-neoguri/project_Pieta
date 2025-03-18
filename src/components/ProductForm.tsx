@@ -15,6 +15,7 @@ type ProductFormProps = {
     stock: number;
     is_available: boolean;
     product_image_url?: string | null;
+    category?: string;
   };
   isEdit?: boolean;
   continueAdding?: boolean;
@@ -38,12 +39,13 @@ export default function ProductForm({
     price: initialData?.price || 0,
     stock: initialData?.stock || 0,
     is_available: initialData?.is_available ?? true,
+    category: initialData?.category || '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.product_image_url || null);
   const [stayOnPage, setStayOnPage] = useState(continueAdding);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     
     if (type === 'number') {
@@ -88,6 +90,7 @@ export default function ProductForm({
       price: 0,
       stock: 0,
       is_available: true,
+      category: '',
     });
     setImageFile(null);
     setImagePreview(null);
@@ -224,6 +227,7 @@ export default function ProductForm({
         stock: formData.stock,
         is_available: formData.is_available,
         product_image_url,
+        category: formData.category,
       };
       
       console.log('저장할 제품 데이터:', productData);
@@ -374,6 +378,26 @@ export default function ProductForm({
               placeholder="재고 수량을 입력하세요"
             />
           </div>
+        </div>
+        
+        <div className="mb-4">
+          <label htmlFor="category" className="block text-gray-700 font-medium mb-2">
+            카테고리 <span className="text-red-500">*</span>
+          </label>
+          <select
+            id="category"
+            name="category"
+            value={formData.category}
+            onChange={handleInputChange}
+            required
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">카테고리 선택</option>
+            <option value="gold">골드바 (투자상품)</option>
+            <option value="silver">실버바 (투자상품)</option>
+            <option value="jewelry">주얼리/악세서리</option>
+            <option value="other">기타</option>
+          </select>
         </div>
         
         <div className="mb-6">
