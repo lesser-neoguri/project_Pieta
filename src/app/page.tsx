@@ -43,7 +43,14 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen relative">
+      {/* 중앙 로고 */}
+      <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+        <h1 className="text-5xl md:text-6xl font-serif tracking-widest text-white drop-shadow-lg">
+          PIETA
+        </h1>
+      </div>
+
       {/* 메인 반분할 섹션 */}
       <div className="flex flex-col md:flex-row flex-grow">
         {/* 왼쪽 섹션 - 투자 상품 */}
@@ -57,31 +64,30 @@ export default function Home() {
           <div 
             className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out"
             style={{ 
-              backgroundImage: "url('https://images.unsplash.com/photo-1624365169198-38205d8aef3b?q=80&w=1000&auto=format&fit=crop')",
+              backgroundImage: "url('https://images.unsplash.com/photo-1610375461369-d613b564f4c4?q=80&w=1287&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D')",
               transform: leftHovered 
                 ? `scale(1.1) translate(${leftBgPosition.x}px, ${leftBgPosition.y}px)` 
                 : 'scale(1) translate(0, 0)',
-              filter: leftHovered ? 'brightness(1.1) contrast(1.1)' : 'brightness(1) contrast(1)'
+              filter: leftHovered ? 'brightness(1) contrast(1.1)' : 'brightness(0.5) contrast(1.1)'
             }}
           />
           <div 
-            className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/40 transition-opacity duration-500"
+            className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/30 transition-opacity duration-500"
             style={{
-              opacity: leftHovered ? 0.4 : 0.6
+              opacity: leftHovered ? 0.3 : 0.7
             }}
           />
           <div className="absolute inset-0 bg-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-          <div className="relative h-96 md:h-full flex flex-col items-center justify-center text-center p-10 z-10">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 transform transition-transform duration-500 group-hover:translate-y-[-5px]">투자 & 골드바</h2>
-            <p className="text-xl text-white mb-8 max-w-md opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
+          <div className="absolute bottom-0 left-0 right-0 p-10 z-10 text-center">
+            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px]">투자 & 골드바</h2>
+            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
               안전하고 가치 있는 투자, 골드바와 실버바로 시작하세요.
             </p>
-            <span className="px-6 py-3 border-2 border-white text-white hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px]">
-              자세히 보기
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2 transform transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </span>
+            <div className="pb-6">
+              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest">
+                자세히 보기
+              </span>
+            </div>
           </div>
         </Link>
 
@@ -96,45 +102,44 @@ export default function Home() {
           <div 
             className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-out"
             style={{ 
-              backgroundImage: "url('https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=1000&auto=format&fit=crop')",
+              backgroundImage: "url('https://images.unsplash.com/photo-1611652022419-a9419f74343d?q=80&w=1288&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D')",
               transform: rightHovered 
                 ? `scale(1.1) translate(${rightBgPosition.x}px, ${rightBgPosition.y}px)` 
                 : 'scale(1) translate(0, 0)',
-              filter: rightHovered ? 'brightness(1.1) contrast(1.1)' : 'brightness(1) contrast(1)'
+              filter: rightHovered ? 'brightness(1) contrast(1.1)' : 'brightness(0.5) contrast(1.1)'
             }}
           />
           <div 
-            className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/40 transition-opacity duration-500"
+            className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/30 transition-opacity duration-500"
             style={{
-              opacity: rightHovered ? 0.4 : 0.6
+              opacity: rightHovered ? 0.3 : 0.7
             }}
           />
           <div className="absolute inset-0 bg-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-          <div className="relative h-96 md:h-full flex flex-col items-center justify-center text-center p-10 z-10">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 transform transition-transform duration-500 group-hover:translate-y-[-5px]">주얼리 & 악세서리</h2>
-            <p className="text-xl text-white mb-8 max-w-md opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
+          <div className="absolute bottom-0 left-0 right-0 p-10 z-10 text-center">
+            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px]">주얼리 & 악세서리</h2>
+            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
               특별한 순간을 빛내줄 아름다운 주얼리를 만나보세요.
             </p>
-            <span className="px-6 py-3 border-2 border-white text-white hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px]">
-              자세히 보기
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-2 transform transition-transform duration-300 group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </span>
+            <div className="pb-6">
+              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest">
+                자세히 보기
+              </span>
+            </div>
           </div>
         </Link>
       </div>
-      <div className="w-full bg-white text-center py-10">
-        <div className="flex justify-center gap-4">
+      <div className="w-full bg-black text-center py-6">
+        <div className="flex justify-center gap-8">
           <Link 
             href="/storelist" 
-            className="text-gray-600 hover:text-gray-900 transition-colors"
+            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider"
           >
             상점 모아보기
           </Link>
           <Link 
             href="/itemlist" 
-            className="text-gray-600 hover:text-gray-900 transition-colors"
+            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider"
           >
             제품 모아보기
           </Link>

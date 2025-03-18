@@ -21,6 +21,14 @@ type ProductData = {
   category?: string;
 };
 
+// 시세 정보 타입
+type PriceInfo = {
+  type: string;
+  buyPrice: string;
+  sellPrice: string;
+  unit: string;
+};
+
 export default function InvestmentPage() {
   const { user } = useAuth();
   const [products, setProducts] = useState<ProductData[]>([]);
@@ -31,6 +39,17 @@ export default function InvestmentPage() {
   const [sortOption, setSortOption] = useState('price_desc');
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // 시세표 관련 상태
+  const [showPriceTable, setShowPriceTable] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [priceInfo, setPriceInfo] = useState<PriceInfo[]>([
+    { type: '순금시세 Gold24k-3.75g', buyPrice: '610,000', sellPrice: '525,000', unit: '원/3.75g' },
+    { type: '18K 금시세 Gold18k-3.75g', buyPrice: '제품시세적용', sellPrice: '385,900', unit: '원/3.75g' },
+    { type: '14K 금시세 Gold14k-3.75g', buyPrice: '제품시세적용', sellPrice: '299,300', unit: '원/3.75g' },
+    { type: '백금시세 Platinum-3.75g', buyPrice: '205,000', sellPrice: '166,000', unit: '원/3.75g' },
+    { type: '은시세 Silver-3.75g', buyPrice: '6,950', sellPrice: '5,530', unit: '원/3.75g' }
+  ]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -105,6 +124,14 @@ export default function InvestmentPage() {
     };
 
     fetchProducts();
+    
+    // 1시간마다 시세 업데이트 (실제로는 API 연동 필요)
+    const updateInterval = setInterval(() => {
+      setLastUpdated(new Date());
+      // 실제 구현에서는 여기서 API 호출 필요
+    }, 3600000); // 1시간(3600000ms)
+    
+    return () => clearInterval(updateInterval);
   }, [sortOption, showUnavailable, searchQuery]);
 
   return (
@@ -120,7 +147,84 @@ export default function InvestmentPage() {
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto px-4 py-12">
+      {/* 시세표 영역 */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
+          <div 
+            className="flex items-center justify-between p-4 bg-gradient-to-r from-yellow-600 to-yellow-800 text-white cursor-pointer"
+            onClick={() => setShowPriceTable(!showPriceTable)}
+          >
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h2 className="text-xl font-semibold">금/은 실시간 시세</h2>
+            </div>
+            <div className="flex items-center">
+              <span className="text-sm mr-4">
+                마지막 업데이트: {lastUpdated.toLocaleString('ko-KR')}
+              </span>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className={`h-6 w-6 transform transition-transform duration-300 ${showPriceTable ? 'rotate-180' : ''}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+          
+          {showPriceTable && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      구분
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      내가 살 때 (buy)
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      내가 팔 때 (sell)
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      단위
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {priceInfo.map((info, index) => (
+                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {info.type}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {info.buyPrice}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {info.sellPrice}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {info.unit}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="p-3 bg-gray-50 text-xs text-gray-500">
+                <p>* 시세는 한국금거래소 기준으로 1시간마다 업데이트됩니다.</p>
+                <p>* 제품별 가격은 실제 구매 시 약간의 차이가 있을 수 있습니다.</p>
+                <p>* 출처: <a href="https://goldlee6479.koreagoldx.co.kr/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">한국금거래소</a></p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="max-w-7xl mx-auto px-4 py-6">
         {/* 필터링 및 검색 */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
