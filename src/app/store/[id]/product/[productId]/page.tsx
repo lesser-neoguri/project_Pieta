@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import DOMPurify from 'dompurify';
+import { X } from 'lucide-react';
 
 type StoreData = {
   id: string;
@@ -15,6 +17,9 @@ type StoreData = {
   is_open: boolean;
   created_at: string;
   vendor_id: string;
+  store_phone?: string;
+  store_email?: string;
+  store_website?: string;
 };
 
 type ProductData = {
@@ -29,6 +34,14 @@ type ProductData = {
   created_at: string;
   total_sales?: number;
   average_rating?: number;
+  material?: string;
+  weight?: number;
+  purity?: string;
+  dimensions?: string;
+  origin?: string;
+  warranty?: string;
+  shipping_info?: string;
+  return_policy?: string;
 };
 
 type ProductFavorite = {
@@ -78,6 +91,12 @@ export default function ProductDetailPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [userHasReviewed, setUserHasReviewed] = useState(false);
   const [userReview, setUserReview] = useState<ProductReview | null>(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  
+  // 추가 이미지 관련 상태
+  const [productImages, setProductImages] = useState<{ id: string; url: string; is_primary: boolean }[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStoreAndProduct = async () => {
@@ -128,6 +147,25 @@ export default function ProductDetailPage() {
         console.log('average_rating 값:', productData.average_rating);
 
         setProduct(productData);
+        setSelectedImage(productData.product_image_url);
+
+        // 추가 이미지 가져오기
+        const { data: productImagesData, error: productImagesError } = await supabase
+          .from('product_images')
+          .select('*')
+          .eq('product_id', productId)
+          .order('display_order', { ascending: true });
+          
+        if (productImagesError) {
+          console.error('추가 이미지 조회 오류:', productImagesError);
+        } else if (productImagesData && productImagesData.length > 0) {
+          // 추가 이미지 데이터 설정
+          setProductImages(productImagesData.map((img: any) => ({
+            id: img.id,
+            url: img.image_url,
+            is_primary: img.is_primary
+          })));
+        }
 
         // 관심 정보 가져오기
         if (user) {
@@ -542,6 +580,27 @@ export default function ProductDetailPage() {
     }
   };
 
+  const handleShowReviewForm = () => {
+    setShowReviewForm(true);
+  };
+
+  const handleEditMyReview = () => {
+    setShowReviewForm(true);
+  };
+
+  const handleDeleteMyReview = () => {
+    if (!user || !userReview) return;
+    
+    if (!confirm('정말 리뷰를 삭제하시겠습니까?')) return;
+    
+    handleDeleteReview();
+  };
+
+  // 이미지 변경 함수
+  const handleImageSelect = (imageUrl: string) => {
+    setSelectedImage(imageUrl);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -573,421 +632,364 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="max-w-7xl mx-auto">
-        {/* 상점 정보 및 네비게이션 */}
-        <div className="mb-6">
-          <nav className="flex items-center text-sm text-gray-500 mb-4">
-            <Link href="/" className="hover:text-blue-600">홈</Link>
-            <span className="mx-2">›</span>
-            <Link href="/storelist" className="hover:text-blue-600">상점 목록</Link>
-            <span className="mx-2">›</span>
-            <Link href={`/store/${store.id}`} className="hover:text-blue-600">{store.store_name}</Link>
-            <span className="mx-2">›</span>
-            <span className="text-gray-900">{product.product_name}</span>
+    <div className="min-h-screen bg-white">
+      {/* Rich Editor 스타일 */}
+      <style>
+        {`
+        .rich-editor h2 {
+          font-size: 1.5rem;
+          font-weight: 600;
+          margin: 1rem 0;
+          color: #111;
+        }
+        .rich-editor h3 {
+          font-size: 1.25rem;
+          font-weight: 600;
+          margin: 0.8rem 0;
+          color: #333;
+        }
+        .rich-editor h4 {
+          font-size: 1.125rem;
+          font-weight: 600;
+          margin: 0.6rem 0;
+          color: #444;
+        }
+        .rich-editor .paragraph {
+          margin: 0.5rem 0;
+          line-height: 1.6;
+        }
+        .rich-editor .small-text {
+          font-size: 0.875rem;
+          color: #666;
+          line-height: 1.4;
+        }
+        .rich-editor strong {
+          font-weight: 700;
+        }
+        .rich-editor em {
+          font-style: italic;
+        }
+        .rich-editor u {
+          text-decoration: underline;
+        }
+        .rich-editor ul, .rich-editor ol {
+          margin-left: 1.5rem;
+          margin-bottom: 1rem;
+        }
+        .rich-editor ul li {
+          list-style-type: disc;
+        }
+        .rich-editor ol li {
+          list-style-type: decimal;
+        }
+        `}
+      </style>
+      
+      {/* 네비게이션 */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center justify-between h-16">
+            <div className="flex items-center space-x-2 text-sm text-gray-500">
+              <Link href="/" className="hover:text-gray-900">홈</Link>
+              <span>/</span>
+              <Link href="/stores" className="hover:text-gray-900">스토어</Link>
+              <span>/</span>
+              <Link href={`/store/${storeId}`} className="hover:text-gray-900">{store?.store_name || '상점'}</Link>
+              <span>/</span>
+              <span className="text-gray-900">{product?.product_name || '제품'}</span>
+            </div>
+            {user && isOwner && (
+              <div className="flex items-center space-x-4">
+                <Link
+                  href={`/store/${storeId}/product/edit/${productId}`}
+                  className="text-sm text-gray-600 hover:text-gray-900 font-pretendard"
+                >
+                  수정
+                </Link>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="text-sm text-gray-600 hover:text-gray-900 font-pretendard"
+                >
+                  삭제
+                </button>
+              </div>
+            )}
           </nav>
         </div>
-        
-        {/* 제품 상세 정보 */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="md:flex">
-            {/* 제품 이미지 */}
-            <div className="md:w-1/2 h-96 bg-gray-200 relative">
-              {product.product_image_url ? (
-                <img
-                  src={product.product_image_url}
-                  alt={`${product.product_name} 이미지`}
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                  <span className="text-gray-400 text-6xl">{product.product_name.charAt(0)}</span>
-                </div>
-              )}
-              {!product.is_available && (
-                <div className="absolute top-4 right-4 px-3 py-1 text-sm font-medium text-white rounded bg-red-500">
-                  품절
-                </div>
-              )}
-            </div>
-            
-            {/* 제품 정보 */}
-            <div className="md:w-1/2 p-8">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 mb-2">{product.product_name}</h1>
-                  <p className="text-sm text-gray-500 mb-4">
-                    판매처: <Link href={`/store/${store.id}`} className="text-blue-600 hover:underline">{store.store_name}</Link>
-                  </p>
-                </div>
-                {isOwner && (
-                  <div className="flex space-x-2">
-                    <Link
-                      href={`/store/${store.id}/product/edit/${product.id}`}
-                      className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors text-sm"
-                    >
-                      수정
-                    </Link>
+      </div>
+
+      {/* 메인 컨텐츠 */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        {!loading && product && store && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+            {/* 제품 이미지 섹션 */}
+            <div>
+              {/* 메인 이미지 */}
+              <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative group mb-4">
+                {selectedImage ? (
+                  <>
+                    <img
+                      src={`${selectedImage}?quality=60&width=600`}
+                      alt={product.product_name}
+                      className="w-full h-full object-contain"
+                    />
                     <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors text-sm"
+                      onClick={() => setShowImageModal(true)}
+                      className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all opacity-0 group-hover:opacity-100"
                     >
-                      삭제
+                      <span className="px-4 py-2 bg-white text-gray-900 rounded-lg font-pretendard text-sm">
+                        원본 보기
+                      </span>
                     </button>
+                  </>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-gray-300 text-7xl font-serif">{product.product_name.charAt(0)}</span>
+                  </div>
+                )}
+                {!product.is_available && (
+                  <div className="absolute top-4 right-4 px-4 py-2 text-sm font-medium text-white bg-black/80 backdrop-blur-sm rounded-full">
+                    품절
                   </div>
                 )}
               </div>
               
-              <div className="border-t border-b py-4 my-4">
-                <p className="text-3xl font-bold text-gray-900 mb-2">{product.price.toLocaleString()}원</p>
-                <div className="flex items-center mt-2 space-x-4">
+              {/* 이미지 갤러리 */}
+              {(productImages.length > 0 || product.product_image_url) && (
+                <div className="grid grid-cols-5 gap-2 mt-4">
+                  {/* 메인 제품 이미지를 첫 번째로 추가 */}
+                  {product.product_image_url && (
+                    <div 
+                      className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${selectedImage === product.product_image_url ? 'border-black' : 'border-transparent'}`}
+                      onClick={() => handleImageSelect(product.product_image_url!)}
+                    >
+                      <img 
+                        src={product.product_image_url} 
+                        alt={product.product_name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* 추가 이미지들 */}
+                  {productImages.map(image => (
+                    <div 
+                      key={image.id}
+                      className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${selectedImage === image.url ? 'border-black' : 'border-transparent'}`}
+                      onClick={() => handleImageSelect(image.url)}
+                    >
+                      <img 
+                        src={image.url} 
+                        alt={`${product.product_name} 추가 이미지`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 제품 정보 섹션 */}
+            <div>
+              <div className="mb-8">
+                <Link href={`/store/${storeId}`} className="group inline-flex items-center space-x-3 mb-6">
+                  <div className="w-12 h-12 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
+                    {store?.store_logo_url ? (
+                      <img
+                        src={store.store_logo_url}
+                        alt={store.store_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <span className="text-gray-400 text-base font-serif">
+                          {store?.store_name?.charAt(0) || 'S'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 mb-1">스토어</span>
+                    <h2 className="text-base font-medium text-gray-900 group-hover:text-gray-600 transition-colors">
+                      {store?.store_name || '상점명'}
+                    </h2>
+                  </div>
+                </Link>
+
+                <h1 className="text-3xl font-pretendard text-gray-900 mb-4">{product.product_name}</h1>
+                <div className="flex items-center space-x-6 mb-6">
                   <div className="flex items-center">
-                    <span className={`inline-block w-3 h-3 rounded-full mr-2 ${product.is_available ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                    <span className={`text-sm ${product.is_available ? 'text-green-600' : 'text-red-600'}`}>
-                      {product.is_available ? '구매 가능' : '품절'}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <span className="ml-1 text-sm font-medium text-gray-600 font-pretendard">
+                      {product.average_rating?.toFixed(1) || '0.0'}
+                    </span>
+                    <span className="ml-1 text-gray-400 text-sm font-pretendard">
+                      ({reviews.length}개 리뷰)
                     </span>
                   </div>
-                  
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-600">
-                      판매량: {product.total_sales !== undefined ? product.total_sales : 0}개
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-600 flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-400 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                      {product.average_rating !== undefined ? product.average_rating.toFixed(1) : '0.0'} ({reviews.length}개 리뷰)
-                    </span>
+                  <div className="text-sm text-gray-500 font-pretendard">
+                    판매량: {product.total_sales || 0}개
                   </div>
                 </div>
                 
-                <div className="mt-4">
+                <p className="text-3xl font-pretendard text-gray-900 mb-6">
+                  {product.price.toLocaleString()}원
+                </p>
+                
+                <div className="mb-6">
+                  <div className="prose prose-sm max-w-none font-pretendard">
+                    <div 
+                      dangerouslySetInnerHTML={{ 
+                        __html: product.product_description ? DOMPurify.sanitize(product.product_description) : '' 
+                      }}
+                      className="rich-editor text-gray-600 leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 구매 옵션 */}
+              <div className="mb-8">
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="flex items-center border border-gray-200">
+                    <button 
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-50"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max={product.stock}
+                      value={quantity}
+                      onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                      className="w-16 text-center border-x border-gray-200 py-2 focus:outline-none"
+                    />
+                    <button 
+                      onClick={() => setQuantity(Math.min(product.stock || 1, quantity + 1))}
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    재고: {product.stock}개
+                  </div>
+                </div>
+
+                <div className="flex space-x-4">
                   <button
-                    onClick={toggleFavorite}
-                    className={`flex items-center px-3 py-1 rounded text-sm ${
-                      isFavorite 
-                        ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    onClick={handleAddToCart}
+                    disabled={!product.is_available}
+                    className={`flex-1 px-8 py-4 text-sm uppercase tracking-widest font-medium ${
+                      product.is_available
+                        ? 'bg-black text-white hover:bg-gray-800'
+                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     } transition-colors`}
                   >
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      className={`h-4 w-4 mr-1 ${isFavorite ? 'text-red-500' : 'text-gray-400'}`} 
-                      viewBox="0 0 20 20" 
-                      fill="currentColor"
-                    >
-                      <path 
-                        fillRule="evenodd" 
-                        d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" 
-                        clipRule="evenodd" 
-                      />
-                    </svg>
-                    {isFavorite ? '관심 상품 해제' : '관심 상품 등록'} ({favoriteCount})
+                    장바구니에 추가
+                  </button>
+                  <button
+                    onClick={() => {/* 구매하기 기능 */}}
+                    disabled={!product.is_available}
+                    className={`flex-1 px-8 py-4 text-sm uppercase tracking-widest font-medium border border-black ${
+                      product.is_available
+                        ? 'text-black hover:bg-gray-50'
+                        : 'text-gray-500 border-gray-300 cursor-not-allowed'
+                    } transition-colors`}
+                  >
+                    바로 구매
                   </button>
                 </div>
               </div>
-              
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold mb-2">제품 설명</h2>
-                <p className="text-gray-700 whitespace-pre-line">
-                  {product.product_description || '제품 설명이 없습니다.'}
-                </p>
-              </div>
-              
-              {product.is_available && (
-                <div className="mb-6">
-                  <div className="flex items-center mb-4">
-                    <label htmlFor="quantity" className="block text-gray-700 font-medium mr-4">
-                      수량
-                    </label>
-                    <div className="flex items-center">
-                      <button 
-                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                        className="px-3 py-1 border border-gray-300 rounded-l-md bg-gray-100 hover:bg-gray-200"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        id="quantity"
-                        value={quantity}
-                        onChange={handleQuantityChange}
-                        min="1"
-                        max={product.stock}
-                        className="w-16 px-3 py-1 border-t border-b border-gray-300 text-center"
-                      />
-                      <button 
-                        onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                        className="px-3 py-1 border border-gray-300 rounded-r-md bg-gray-100 hover:bg-gray-200"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="ml-4 text-sm text-gray-500">
-                      (재고: {product.stock}개)
-                    </span>
-                  </div>
-                  
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={handleAddToCart}
-                      className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      장바구니에 추가
-                    </button>
-                    <button
-                      className="flex-1 px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                    >
-                      바로 구매하기
-                    </button>
-                  </div>
+
+              {/* 공유 및 관심 */}
+              <div className="flex items-center space-x-6 border-t border-gray-100 pt-6">
+                <div className="flex items-center space-x-4">
+                  <button className="text-gray-500 hover:text-black transition-colors">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                  </button>
+                  <button className="text-gray-500 hover:text-black transition-colors">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.259-.012 3.668-.069 4.948-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                    </svg>
+                  </button>
+                  <button className="text-gray-500 hover:text-black transition-colors">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/>
+                    </svg>
+                  </button>
                 </div>
-              )}
-              
-              <div className="mt-8">
-                <Link
-                  href={`/store/${store.id}`}
-                  className="text-blue-600 hover:underline"
-                >
-                  ← {store.store_name} 상점으로 돌아가기
-                </Link>
-              </div>
-            </div>
-          </div>
-          
-          {/* 리뷰 섹션 */}
-          <div className="p-8 border-t">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              고객 리뷰 ({reviews.length})
-            </h2>
-            
-            {/* 리뷰 작성 폼 */}
-            {user ? (
-              <div className="mb-8 bg-gray-50 p-6 rounded-lg">
-                <h3 className="text-lg font-semibold mb-4">
-                  {userHasReviewed ? '내 리뷰 수정하기' : '리뷰 작성하기'}
-                </h3>
-                
-                <form onSubmit={handleReviewSubmit}>
-                  <div className="mb-4">
-                    <label className="block text-gray-700 font-medium mb-2">
-                      별점
-                    </label>
-                    <div className="flex items-center">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <label key={star} className="mr-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="rating"
-                            value={star}
-                            checked={reviewForm.rating === star}
-                            onChange={handleReviewChange}
-                            className="sr-only"
-                          />
-                          <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            className={`h-8 w-8 ${
-                              star <= reviewForm.rating ? 'text-yellow-400' : 'text-gray-300'
-                            } hover:text-yellow-400 transition-colors`}
-                            viewBox="0 0 20 20" 
-                            fill="currentColor"
-                          >
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                          </svg>
-                        </label>
-                      ))}
-                      <span className="ml-2 text-gray-700">{reviewForm.rating}점</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label htmlFor="review_text" className="block text-gray-700 font-medium mb-2">
-                      리뷰 내용
-                    </label>
-                    <textarea
-                      id="review_text"
-                      name="review_text"
-                      value={reviewForm.review_text}
-                      onChange={handleReviewChange}
-                      rows={4}
-                      className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="제품에 대한 솔직한 리뷰를 작성해주세요."
-                    />
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 font-medium mb-2">
-                      이미지 첨부 (선택사항)
-                    </label>
-                    <div className="text-xs text-gray-500 mb-2">
-                      지원 형식: JPG, PNG, GIF, WEBP (최대 10MB)
-                    </div>
-                    
-                    {reviewImagePreview ? (
-                      <div className="relative inline-block mb-2">
-                        <img 
-                          src={reviewImagePreview} 
-                          alt="리뷰 이미지 미리보기" 
-                          className="h-32 object-cover rounded-md"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleRemoveReviewImage}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ) : (
-                      <input
-                        type="file"
-                        id="review_image"
-                        name="review_image"
-                        accept="image/jpeg,image/png,image/gif,image/webp"
-                        onChange={handleReviewImageChange}
-                        className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    )}
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <div>
-                      {userHasReviewed && (
-                        <button
-                          type="button"
-                          onClick={handleDeleteReview}
-                          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors mr-2"
-                          disabled={reviewSubmitting}
-                        >
-                          리뷰 삭제
-                        </button>
-                      )}
-                    </div>
-                    <button
-                      type="submit"
-                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                      disabled={reviewSubmitting}
-                    >
-                      {reviewSubmitting ? '처리 중...' : userHasReviewed ? '리뷰 수정' : '리뷰 등록'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            ) : (
-              <div className="mb-8 bg-gray-50 p-6 rounded-lg text-center">
-                <p className="text-gray-600 mb-4">리뷰를 작성하려면 로그인이 필요합니다.</p>
-                <Link
-                  href="/login"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-block"
-                >
-                  로그인하기
-                </Link>
-              </div>
-            )}
-            
-            {/* 리뷰 목록 */}
-            {reviewLoading ? (
-              <p className="text-gray-500">리뷰 로딩 중...</p>
-            ) : reviews.length > 0 ? (
-              <div className="space-y-6">
-                {reviews.map((review) => (
-                  <div key={review.id} className="border-b pb-6 last:border-b-0">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <div className="flex items-center">
-                          <div className="flex">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <svg 
-                                key={star}
-                                xmlns="http://www.w3.org/2000/svg" 
-                                className={`h-5 w-5 ${star <= review.rating ? 'text-yellow-400' : 'text-gray-300'}`}
-                                viewBox="0 0 20 20" 
-                                fill="currentColor"
-                              >
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                              </svg>
-                            ))}
-                          </div>
-                          <span className="ml-2 text-sm font-medium text-gray-700">{review.user_name}</span>
-                          {review.is_verified_purchase && (
-                            <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded">
-                              구매 확인
-                            </span>
-                          )}
-                          {user && review.user_id === user.id && (
-                            <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
-                              내 리뷰
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(review.created_at).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {review.review_image_url && (
-                      <div className="mb-3">
-                        <img 
-                          src={review.review_image_url} 
-                          alt="리뷰 이미지" 
-                          className="h-24 object-cover rounded"
-                        />
-                      </div>
-                    )}
-                    
-                    <p className="text-gray-700 whitespace-pre-line">
-                      {review.review_text || '내용 없음'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-gray-50 p-6 rounded text-center">
-                <p className="text-gray-500 mb-4">아직 리뷰가 없습니다.</p>
-                <p className="text-sm text-gray-400">
-                  첫 번째 리뷰를 작성해보세요!
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* 삭제 확인 모달 */}
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
-              <h3 className="text-xl font-bold text-gray-900 mb-4">제품 삭제 확인</h3>
-              <p className="text-gray-700 mb-6">
-                <strong>{product.product_name}</strong> 제품을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
-              </p>
-              <div className="flex justify-end space-x-4">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-                  disabled={deleteLoading}
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleDeleteProduct}
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                  disabled={deleteLoading}
-                >
-                  {deleteLoading ? '삭제 중...' : '삭제'}
-                </button>
+                {user && (
+                  <button
+                    onClick={toggleFavorite}
+                    className={`flex items-center space-x-2 ${
+                      isFavorite ? 'text-red-500' : 'text-gray-500'
+                    } hover:text-red-500 transition-colors`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isFavorite ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <span className="text-sm">관심상품</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* 이미지 상세보기 모달 */}
+      {showImageModal && selectedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+          <div className="relative max-w-5xl w-full">
+            <button
+              className="absolute top-0 right-0 p-2 text-white hover:text-gray-300 z-10"
+              onClick={() => setShowImageModal(false)}
+            >
+              <X className="w-8 h-8" />
+            </button>
+            <img
+              src={selectedImage}
+              alt={product?.product_name}
+              className="w-full h-auto object-contain"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 max-w-md w-full">
+            <h3 className="text-lg font-medium text-black mb-4">제품 삭제</h3>
+            <p className="text-gray-600 mb-6 font-light">
+              <strong>{product.product_name}</strong> 제품을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
+            </p>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-6 py-2.5 border border-gray-300 text-xs uppercase tracking-widest font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDeleteProduct}
+                disabled={deleteLoading}
+                className="px-6 py-2.5 bg-red-600 text-white hover:bg-red-700 transition-colors text-xs uppercase tracking-widest font-medium disabled:opacity-50"
+              >
+                {deleteLoading ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

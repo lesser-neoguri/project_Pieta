@@ -1,16 +1,75 @@
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfile } from '@/contexts/ProfileContext';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
+import dynamic from 'next/dynamic';
+
+const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathname }: { showBanner: boolean; setShowBanner: (show: boolean) => void; pathname: string }) => {
+  if (!showBanner || pathname === '/') return null;
+  
+  return (
+    <div className="bg-black text-white px-4 py-2 relative transition-all duration-300 ease-in-out">
+      <div className="max-w-8xl mx-auto flex justify-between items-center">
+        <div className="flex-1 text-center font-medium text-sm sm:text-base">
+          신규 회원 가입 시 첫 구매 5% 할인 혜택을 드립니다!
+        </div>
+        <button 
+          onClick={() => setShowBanner(false)} 
+          className="text-white hover:text-gray-100"
+          aria-label="배너 닫기"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}), { ssr: false });
 
 export default function Navbar() {
   const { user, signOut } = useAuth();
+  const { openProfile } = useProfile();
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [showSideMenu, setShowSideMenu] = useState(false);
-  const [showBanner, setShowBanner] = useState(true);
+  const [showBanner, setShowBanner] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useLayoutEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      const storedBannerState = localStorage.getItem('bannerState');
+      if (storedBannerState === null) {
+        setShowBanner(true);
+      } else {
+        setShowBanner(storedBannerState === 'true');
+      }
+    }
+  }, [mounted]);
+
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('bannerState', showBanner.toString());
+    }
+  }, [showBanner, mounted]);
   
   // 메인 페이지에서는 네비게이션 바를 숨김
   if (pathname === '/') {
@@ -20,27 +79,13 @@ export default function Navbar() {
   // 투자 페이지에서는 로고 텍스트를 변경
   const isInvestmentPage = pathname.startsWith('/investment');
   
+  if (!mounted) {
+    return null;
+  }
+  
   return (
     <>
-      {/* 상단 배너 - 루트 페이지가 아닐 때만 표시 */}
-      {showBanner && pathname !== '/' && (
-        <div className="bg-yellow-500 text-white px-4 py-2 relative transition-all duration-300 ease-in-out">
-          <div className="max-w-8xl mx-auto flex justify-between items-center">
-            <div className="flex-1 text-center font-medium text-sm sm:text-base">
-              신규 회원 가입 시 첫 구매 5% 할인 혜택을 드립니다!
-            </div>
-            <button 
-              onClick={() => setShowBanner(false)} 
-              className="text-white hover:text-gray-100"
-              aria-label="배너 닫기"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
+      <Banner showBanner={showBanner} setShowBanner={setShowBanner} pathname={pathname} />
       
       <nav className="bg-white shadow-sm">
         <div className="max-w-8xl mx-auto px-1 sm:px-6 lg:px-10">
@@ -116,8 +161,8 @@ export default function Navbar() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                     </svg>
                   </Link>
-                  <Link
-                    href="/profile"
+                  <button
+                    onClick={openProfile}
                     className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
                     aria-label="프로필"
                     title="프로필"
@@ -125,7 +170,7 @@ export default function Navbar() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                  </Link>
+                  </button>
                   <button
                     onClick={signOut}
                     className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
@@ -171,7 +216,7 @@ export default function Navbar() {
                 <input
                   type="text"
                   placeholder="검색어를 입력하세요"
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 font-pretendard"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

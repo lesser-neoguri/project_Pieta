@@ -117,10 +117,10 @@ export default function ItemListPage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
             </svg>
-            홈으로 돌아가기
+            <span className="font-pretendard">홈으로 돌아가기</span>
           </Link>
-          <h1 className="text-3xl font-bold mt-4">제품 모아보기</h1>
-          <p className="text-gray-600 mt-2">
+          <h1 className="text-3xl font-bold mt-4 font-pretendard">제품 모아보기</h1>
+          <p className="text-gray-600 mt-2 font-pretendard">
             모든 상점의 제품들을 한 눈에 확인하고 비교해보세요.
           </p>
         </div>
@@ -134,15 +134,15 @@ export default function ItemListPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="제품명, 설명 또는 상점명으로 검색"
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-pretendard"
               />
             </div>
             
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center">
-                <span className="text-gray-700 mr-2">정렬:</span>
+                <span className="text-gray-700 mr-2 font-pretendard">정렬:</span>
                 <select 
-                  className="border rounded-md px-2 py-2 text-sm"
+                  className="border rounded-md px-2 py-2 text-sm font-pretendard"
                   value={sortOption}
                   onChange={(e) => setSortOption(e.target.value)}
                 >
@@ -162,7 +162,7 @@ export default function ItemListPage() {
                     onChange={(e) => setShowUnavailable(e.target.checked)}
                     className="form-checkbox h-4 w-4 text-blue-600"
                   />
-                  <span className="ml-2 text-sm">품절 상품 표시</span>
+                  <span className="ml-2 text-sm font-pretendard">품절 상품 표시</span>
                 </label>
               </div>
             </div>
@@ -172,57 +172,59 @@ export default function ItemListPage() {
         {/* 제품 목록 */}
         {loading ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <p className="text-lg text-gray-600">제품 정보를 불러오는 중...</p>
+            <p className="text-lg text-gray-600 font-pretendard">제품 정보를 불러오는 중...</p>
           </div>
         ) : error ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <p className="text-lg text-red-600">{error}</p>
+            <p className="text-lg text-red-600 font-pretendard">{error}</p>
           </div>
         ) : products.length === 0 ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-gray-600 font-pretendard">
               {searchQuery ? '검색 결과가 없습니다.' : '등록된 제품이 없습니다.'}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {products.map((product) => (
-              <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+              <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden group">
                 <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
-                  <div className="h-48 bg-gray-200 relative">
+                  <div className="relative aspect-square bg-gray-50">
                     {product.product_image_url ? (
                       <img
                         src={product.product_image_url}
-                        alt={`${product.product_name} 이미지`}
-                        className="w-full h-full object-cover"
+                        alt={product.product_name}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                        <span className="text-gray-400 text-lg">{product.product_name.charAt(0)}</span>
+                      <div className="w-full h-full flex items-center justify-center">
+                        <span className="text-gray-300 text-3xl font-serif">
+                          {product.product_name.charAt(0)}
+                        </span>
                       </div>
                     )}
                     {!product.is_available && (
-                      <div className="absolute top-2 right-2 px-2 py-1 text-xs font-medium text-white rounded bg-red-500">
+                      <div className="absolute top-4 right-4 px-3 py-1 text-xs text-white bg-black/80 backdrop-blur-sm rounded-full font-pretendard">
                         품절
                       </div>
                     )}
                   </div>
                   <div className="p-4">
-                    <p className="text-sm text-blue-600 mb-1">{product.store_name}</p>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">{product.product_name}</h3>
-                    <p className="text-lg font-bold text-gray-900 mb-2">{product.price.toLocaleString()}원</p>
+                    <p className="text-sm text-gray-500 mb-1 font-pretendard">{product.store_name}</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2 font-pretendard">{product.product_name}</h3>
+                    <p className="text-xl font-serif text-gray-900">{product.price.toLocaleString()}원</p>
                     
-                    <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                         </svg>
-                        <span className="text-sm text-gray-600 ml-1">
+                        <span className="text-sm text-gray-600 ml-1 font-pretendard">
                           {product.average_rating !== undefined ? product.average_rating.toFixed(1) : '0.0'}
                         </span>
                       </div>
-                      <span className="text-sm text-gray-500">
-                        판매 {product.total_sales !== undefined ? product.total_sales : 0}개
+                      <span className="text-sm text-gray-500 font-pretendard">
+                        판매 {product.total_sales || 0}개
                       </span>
                     </div>
                   </div>

@@ -79,12 +79,12 @@ export default function Home() {
           />
           <div className="absolute inset-0 bg-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
           <div className="absolute bottom-0 left-0 right-0 p-10 z-10 text-center">
-            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px]">투자 & 골드바</h2>
-            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
+            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px] font-pretendard">투자 & 골드바</h2>
+            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px] font-pretendard">
               안전하고 가치 있는 투자, 골드바와 실버바로 시작하세요.
             </p>
             <div className="pb-6">
-              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest">
+              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest font-pretendard">
                 자세히 보기
               </span>
             </div>
@@ -117,12 +117,12 @@ export default function Home() {
           />
           <div className="absolute inset-0 bg-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
           <div className="absolute bottom-0 left-0 right-0 p-10 z-10 text-center">
-            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px]">주얼리 & 악세서리</h2>
-            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px]">
+            <h2 className="text-3xl font-light text-white mb-4 tracking-wider transform transition-transform duration-500 group-hover:translate-y-[-5px] font-pretendard">주얼리 & 악세서리</h2>
+            <p className="text-sm text-white/80 mb-8 max-w-md mx-auto opacity-90 transform transition-all duration-500 group-hover:opacity-100 group-hover:translate-y-[-5px] font-pretendard">
               특별한 순간을 빛내줄 아름다운 주얼리를 만나보세요.
             </p>
             <div className="pb-6">
-              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest">
+              <span className="px-6 py-2 border border-white text-white text-sm hover:bg-white hover:text-black transition-all duration-300 inline-flex items-center transform group-hover:translate-y-[-5px] tracking-widest font-pretendard">
                 자세히 보기
               </span>
             </div>
@@ -133,13 +133,13 @@ export default function Home() {
         <div className="flex justify-center gap-8">
           <Link 
             href="/storelist" 
-            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider"
+            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider font-pretendard"
           >
             상점 모아보기
           </Link>
           <Link 
             href="/itemlist" 
-            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider"
+            className="text-white/70 hover:text-white transition-colors text-sm tracking-wider font-pretendard"
           >
             제품 모아보기
           </Link>

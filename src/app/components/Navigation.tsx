@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function Navigation() {
   const { user, loading } = useAuth();
+  const router = useRouter();
   const [isVendor, setIsVendor] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
+  const [storeId, setStoreId] = useState<string | null>(null);
 
   useEffect(() => {
     const checkUserType = async () => {
@@ -22,7 +25,7 @@ export default function Navigation() {
         if (!error && data) {
           setIsVendor(data.user_type === 'vendor');
           
-          // 입점회원인 경우 승인 상태 확인
+          // 입점회원인 경우 승인 상태와 상점 정보 확인
           if (data.user_type === 'vendor') {
             const { data: vendorData, error: vendorError } = await supabase
               .from('vendor_users')
@@ -30,8 +33,19 @@ export default function Navigation() {
               .eq('user_id', user.id)
               .single();
             
-            if (!vendorError && vendorData) {
-              setIsApproved(vendorData.status === 'approved');
+            if (!vendorError && vendorData && vendorData.status === 'approved') {
+              setIsApproved(true);
+              
+              // 상점 정보 가져오기
+              const { data: storeData, error: storeError } = await supabase
+                .from('stores')
+                .select('id')
+                .eq('vendor_id', user.id)
+                .single();
+                
+              if (!storeError && storeData) {
+                setStoreId(storeData.id);
+              }
             }
           }
         }
@@ -40,6 +54,16 @@ export default function Navigation() {
     
     checkUserType();
   }, [user]);
+
+  // 상점 관리 링크 클릭 시 처리
+  const handleStoreManagement = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (storeId) {
+      router.push(`/store/${storeId}`);
+    } else {
+      router.push('/vendor/store');
+    }
+  };
 
   return (
     <nav className="bg-white shadow-md">
@@ -65,12 +89,13 @@ export default function Navigation() {
             {!loading && user ? (
               <>
                 {isVendor && isApproved && (
-                  <Link
-                    href="/vendor/store"
+                  <a
+                    href="#"
+                    onClick={handleStoreManagement}
                     className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
                   >
                     상점 관리
-                  </Link>
+                  </a>
                 )}
                 <Link
                   href="/profile"
@@ -148,12 +173,13 @@ export default function Navigation() {
             {!loading && user ? (
               <>
                 {isVendor && isApproved && (
-                  <Link
-                    href="/vendor/store"
+                  <a
+                    href="#"
+                    onClick={handleStoreManagement}
                     className="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800"
                   >
                     상점 관리
-                  </Link>
+                  </a>
                 )}
                 <Link
                   href="/profile"
