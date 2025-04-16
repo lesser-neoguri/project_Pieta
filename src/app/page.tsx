@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -13,25 +15,23 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="h-screen flex flex-col">
-        {/* Hero Section */}
-        <div className="relative flex-1 flex items-center justify-center overflow-hidden">
-          {/* Background Image */}
-          <div className="absolute inset-0 z-0">
-            <div className="relative w-full h-full">
-              <Image
-                src="/images/hero-bg.jpg"
-                alt="Background"
-                fill
-                className="object-cover"
-                priority
-              />
-              <div className="absolute inset-0 bg-black bg-opacity-30" />
-            </div>
-          </div>
+      {/* Hero Section - 여백 없이 전체 너비 사용 */}
+      <div className="h-screen w-full relative">
+        {/* Background Image */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/hero-bg.jpg"
+            alt="Background"
+            fill
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-30" />
+        </div>
 
-          {/* Content */}
-          <div className="relative z-10 text-center px-4 max-w-xl mx-auto">
+        {/* Content */}
+        <div className="relative z-10 h-full flex flex-col items-center justify-center">
+          <div className="text-center px-4 max-w-xl">
             <h1 className={`text-4xl md:text-5xl font-light text-white mb-6 tracking-[0.2em] uppercase transition-opacity duration-1000 ${
               mounted ? 'opacity-100' : 'opacity-0'
             }`}>
@@ -45,18 +45,22 @@ export default function HomePage() {
             <div className={`space-x-6 transition-opacity duration-1000 delay-500 ${
               mounted ? 'opacity-100' : 'opacity-0'
             }`}>
-              <Link
-                href="/signup"
-                className="inline-block px-8 py-4 bg-white text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
-              >
-                회원가입
-              </Link>
-              <Link
-                href="/login"
-                className="inline-block px-8 py-4 border border-white text-white text-sm tracking-widest uppercase hover:bg-white hover:text-black transition-colors duration-300"
-              >
-                로그인
-              </Link>
+              {!user ? (
+                <>
+                  <Link
+                    href="/signup"
+                    className="inline-block px-8 py-4 bg-white text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
+                  >
+                    회원가입
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="inline-block px-8 py-4 border border-white text-white text-sm tracking-widest uppercase hover:bg-white hover:text-black transition-colors duration-300"
+                  >
+                    로그인
+                  </Link>
+                </>
+              ) : null}
               <Link
                 href="/products"
                 className="inline-block px-8 py-4 bg-white/20 backdrop-blur-sm text-white text-sm tracking-widest uppercase hover:bg-white hover:text-black transition-colors duration-300"
@@ -87,9 +91,34 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Collection Banner Section - 여백 없이 전체 너비 사용 */}
+      <div className="w-full bg-gray-200 relative">
+        <div className="py-20 text-center relative z-10">
+          <p className="text-sm uppercase tracking-widest mb-2">프리미엄 컬렉션</p>
+          <h2 className="text-4xl font-light uppercase tracking-[0.2em] mb-6">COLLECTION</h2>
+          <p className="text-sm mb-6">엄선된 프리미엄 제품들을 만나보세요</p>
+          <Link 
+            href="/products" 
+            className="inline-block px-8 py-3 border border-black text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
+          >
+            더 알아보기
+          </Link>
+        </div>
+        {/* 배경 이미지 추가 (필요시) */}
+        <div className="absolute inset-0 z-0 opacity-30">
+          <Image
+            src="/images/collection-bg.jpg"
+            alt="Collection"
+            fill
+            className="object-cover"
+            priority
+          />
+        </div>
+      </div>
+
       {/* Features Section */}
-      <div className="py-20 px-4">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
+      <div className="py-20 w-full">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 px-4">
           <div className={`text-center transition-opacity duration-1000 delay-300 ${
             mounted ? 'opacity-100' : 'opacity-0'
           }`}>

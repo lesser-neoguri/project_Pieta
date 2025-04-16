@@ -268,9 +268,60 @@ export default function ProductDetailPage() {
     }
   };
 
-  const handleAddToCart = () => {
-    // 장바구니 기능 구현 (향후 확장)
-    alert(`${product?.product_name} ${quantity}개를 장바구니에 추가했습니다.`);
+  const handleAddToCart = async () => {
+    if (!user) {
+      alert('로그인이 필요한 기능입니다.');
+      return;
+    }
+
+    if (!product || !product.is_available || product.stock <= 0) {
+      alert('품절된 상품은 장바구니에 담을 수 없습니다.');
+      return;
+    }
+
+    try {
+      // 이미 장바구니에 있는지 확인
+      const { data: existingCartItem, error: checkError } = await supabase
+        .from('cart_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingCartItem) {
+        // 이미 장바구니에 있으면 수량 업데이트
+        const newQuantity = Math.min(existingCartItem.quantity + quantity, product.stock);
+        
+        const { error: updateError } = await supabase
+          .from('cart_items')
+          .update({ quantity: newQuantity })
+          .eq('id', existingCartItem.id);
+
+        if (updateError) throw updateError;
+        
+        alert(`${product.product_name} 상품이 장바구니에 추가되었습니다. (총 ${newQuantity}개)`);
+      } else {
+        // 새 상품 추가
+        const { error: insertError } = await supabase
+          .from('cart_items')
+          .insert([
+            {
+              user_id: user.id,
+              product_id: productId,
+              quantity: quantity
+            }
+          ]);
+
+        if (insertError) throw insertError;
+        
+        alert(`${product.product_name} ${quantity}개를 장바구니에 추가했습니다.`);
+      }
+    } catch (error: any) {
+      console.error('장바구니에 추가하는 중 오류가 발생했습니다:', error);
+      alert('장바구니에 추가하는 중 오류가 발생했습니다.');
+    }
   };
 
   // 이미지 URL에서 파일 경로 추출하는 함수
@@ -838,6 +889,51 @@ export default function ProductDetailPage() {
                   {product.price.toLocaleString()}원
                 </p>
                 
+                {/* 찜하기 및 장바구니 버튼 추가 */}
+                <div className="flex items-center space-x-4 mb-6">
+                  <button
+                    onClick={toggleFavorite}
+                    className={`flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                      isFavorite 
+                        ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' 
+                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                    aria-label={isFavorite ? '찜 목록에서 제거' : '찜 목록에 추가'}
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className={`h-5 w-5 mr-2 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-400'}`} 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                      fill={isFavorite ? 'currentColor' : 'none'}
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={1.5} 
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
+                      />
+                    </svg>
+                    {isFavorite ? '찜함' : '찜하기'}
+                    {favoriteCount > 0 && (
+                      <span className="ml-1 text-xs bg-gray-200 text-gray-800 rounded-full px-2 py-0.5">
+                        {favoriteCount}
+                      </span>
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={handleAddToCart}
+                    className="flex-1 bg-black text-white py-3 rounded-md text-sm font-medium hover:bg-gray-800 transition-colors flex items-center justify-center"
+                    disabled={!product.is_available || product.stock <= 0}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    {product.is_available && product.stock > 0 ? '장바구니에 추가' : '품절'}
+                  </button>
+                </div>
+                
                 <div className="mb-6">
                   <div className="prose prose-sm max-w-none font-pretendard">
                     <div 
@@ -848,6 +944,129 @@ export default function ProductDetailPage() {
                     />
                   </div>
                 </div>
+
+                {/* 패키지 옵션 및 도움말 서비스 섹션 추가 */}
+                <div className="mb-8 border-t border-gray-100 pt-8">
+                  {/* 패키지 및 선물 옵션 */}
+                  <div className="border-b border-gray-100 pb-4">
+                    <div className="flex justify-between items-center py-4 cursor-pointer" 
+                         onClick={() => {const elem = document.getElementById('package-options'); elem && elem.classList.toggle('hidden')}}>
+                      <h3 className="text-sm uppercase tracking-widest">패키지 & 선물</h3>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    <div id="package-options" className="hidden pb-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center">
+                          <input 
+                            type="radio" 
+                            id="standard-package" 
+                            name="package-option" 
+                            defaultChecked 
+                            onChange={() => {}}
+                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                          />
+                          <label htmlFor="standard-package" className="ml-2 text-sm">기본 패키지</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input 
+                            type="radio" 
+                            id="gift-package" 
+                            name="package-option"
+                            onChange={() => {}}
+                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                          />
+                          <label htmlFor="gift-package" className="ml-2 text-sm">선물 포장 (+ ₩5,000)</label>
+                        </div>
+                        <div className="flex items-center">
+                          <input 
+                            type="radio" 
+                            id="premium-package" 
+                            name="package-option"
+                            onChange={() => {}}
+                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                          />
+                          <label htmlFor="premium-package" className="ml-2 text-sm">프리미엄 패키지 (+ ₩10,000)</label>
+                        </div>
+
+                        <div className="pt-3 text-xs text-gray-500">
+                          * 주문 확인 후 선물 포장 옵션 변경은 불가능합니다.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 배송 정보 */}
+                  <div className="border-b border-gray-100">
+                    <div className="flex justify-between items-center py-4 cursor-pointer"
+                         onClick={() => {const elem = document.getElementById('shipping-info'); elem && elem.classList.toggle('hidden')}}>
+                      <h3 className="text-sm uppercase tracking-widest">무료 일반 배송</h3>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    <div id="shipping-info" className="hidden pb-4">
+                      <div className="space-y-3 text-sm text-gray-600">
+                        <p>• 평일 오후 2시 이전 주문 시 당일 출고, 이후 주문은 익일 출고</p>
+                        <p>• 주문 후 평균 2-3일 이내 수령 (토/일/공휴일 제외)</p>
+                        <p>• 도서산간 지역은 추가 배송일 소요될 수 있음</p>
+                        <p>• 결제 완료 후 배송 조회 가능</p>
+                        <p>• 전국 무료 배송 (제주/도서산간 지역 동일)</p>
+                        <div className="mt-4">
+                          <h4 className="font-medium">프리미엄 배송 (선택 가능)</h4>
+                          <p className="mt-1">• 당일 배송: 서울 지역 오전 11시 이전 주문 시 (+ ₩5,000)</p>
+                          <p>• 퀵 배송: 서울/경기 일부 지역 (+ ₩10,000~)</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 반품 및 교환 정책 */}
+                  <div className="border-b border-gray-100">
+                    <div className="flex justify-between items-center py-4 cursor-pointer"
+                         onClick={() => {const elem = document.getElementById('return-policy'); elem && elem.classList.toggle('hidden')}}>
+                      <h3 className="text-sm uppercase tracking-widest">반품 관련 배송 정책</h3>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    <div id="return-policy" className="hidden pb-4">
+                      <div className="space-y-3 text-sm text-gray-600">
+                        <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
+                        <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
+                        <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
+                        <p>• 일부 주문 제작 상품의 경우 교환/반품이 제한될 수 있음</p>
+                        <p className="font-medium mt-2">반품 불가 상품</p>
+                        <p>• 고객의 사용, 착용, 세탁 등으로 상품 가치가 훼손된 경우</p>
+                        <p>• 밀봉 포장을 개봉하거나 포장이 훼손되어 상품가치가 상실된 경우</p>
+                        <p>• 시간 경과에 따라 재판매가 어려운 상품의 경우</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 결제 방식 */}
+                  <div>
+                    <div className="flex justify-between items-center py-4 cursor-pointer"
+                         onClick={() => {const elem = document.getElementById('payment-methods'); elem && elem.classList.toggle('hidden')}}>
+                      <h3 className="text-sm uppercase tracking-widest">결제 방식</h3>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    <div id="payment-methods" className="hidden pb-4">
+                      <div className="space-y-3 text-sm text-gray-600">
+                        <p>• 신용카드: 국내외 모든 신용/체크카드</p>
+                        <p>• 간편결제: 카카오페이, 네이버페이, 토스, 페이코</p>
+                        <p>• 계좌이체: 실시간 계좌이체</p>
+                        <p>• 가상계좌: 무통장입금 (입금 확인 후 상품 출고)</p>
+                        <p className="mt-3">* 모든 결제는 암호화된 보안 프로토콜을 통해 처리됩니다.</p>
+                        <p>* 해외 카드 결제 시 별도의 수수료가 부과될 수 있습니다.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
 
               {/* 구매 옵션 */}

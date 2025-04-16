@@ -10,25 +10,10 @@ interface MainLayoutProps {
 
 export default function MainLayout({ 
   children, 
-  showNav = true, 
-  showLogo = true,
   centered = true 
 }: MainLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      {showNav && (
-        <header className="w-full py-6 px-4 border-b border-gray-100">
-          {showLogo && (
-            <Link 
-              href="/"
-              className="block w-fit mx-auto text-2xl font-light tracking-[0.2em] hover:opacity-70 transition-opacity"
-            >
-              PIETA
-            </Link>
-          )}
-        </header>
-      )}
-
       <main className={`flex-1 ${centered ? 'flex items-center justify-center' : ''} px-4 py-12`}>
         {children}
       </main>

@@ -25,7 +25,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "프로젝트 피에타",
+  title: "PEITA",
   description: "Next.js와 Supabase로 구축된 프로젝트",
   metadataBase: new URL('https://project-pieta.vercel.app'),
 };
