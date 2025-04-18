@@ -8,6 +8,32 @@ import Link from 'next/link';
 import DOMPurify from 'dompurify';
 import { X } from 'lucide-react';
 
+// 네비게이션 바 컨트롤을 위한 사용자 정의 이벤트 추가
+const emitNavbarEvent = (hide: boolean) => {
+  if (typeof window !== 'undefined') {
+    const event = new CustomEvent('navbarControl', { detail: { hide } });
+    window.dispatchEvent(event);
+  }
+};
+
+// 스로틀 함수 추가
+function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let lastCall = 0;
+  return (...args: Parameters<T>) => {
+    const now = Date.now();
+    if (now - lastCall >= delay) {
+      lastCall = now;
+      func(...args);
+    }
+  };
+}
+
+// 스크롤 처리를 위한 이전 스크롤 위치 저장 변수
+let prevScrollPos = 0;
+
 type StoreData = {
   id: string;
   store_name: string;
@@ -98,7 +124,39 @@ export default function ProductDetailPage() {
   const [productImages, setProductImages] = useState<{ id: string; url: string; is_primary: boolean }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+  // 추가 제품 배너 섹션을 위한 상태 추가
+  const [storeProducts, setStoreProducts] = useState<ProductData[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<ProductData[]>([]);
+  const [recentlyViewedProducts, setRecentlyViewedProducts] = useState<ProductData[]>([]);
+  const [additionalProductsLoading, setAdditionalProductsLoading] = useState(true);
+
   useEffect(() => {
+    // 최근 본 상품 목록을 로컬 스토리지에서 가져오거나 초기화
+    const getRecentlyViewedFromLocalStorage = () => {
+      if (typeof window !== 'undefined') {
+        const recentlyViewed = localStorage.getItem('recentlyViewedProducts');
+        return recentlyViewed ? JSON.parse(recentlyViewed) : [];
+      }
+      return [];
+    };
+
+    // 현재 제품을 최근 본 상품 목록에 추가
+    const addToRecentlyViewed = (product: string) => {
+      if (typeof window !== 'undefined') {
+        const recentlyViewed = getRecentlyViewedFromLocalStorage();
+        
+        // 이미 목록에 있으면 제거 (중복 방지)
+        const filteredList = recentlyViewed.filter((id: string) => id !== product);
+        
+        // 목록 맨 앞에 추가
+        const updatedList = [product, ...filteredList].slice(0, 10); // 최대 10개 유지
+        
+        localStorage.setItem('recentlyViewedProducts', JSON.stringify(updatedList));
+        return updatedList;
+      }
+      return [];
+    };
+
     const fetchStoreAndProduct = async () => {
       setLoading(true);
       
@@ -141,13 +199,11 @@ export default function ProductDetailPage() {
           return;
         }
 
-        // 디버깅을 위한 로그 추가
-        console.log('가져온 제품 데이터:', productData);
-        console.log('total_sales 값:', productData.total_sales);
-        console.log('average_rating 값:', productData.average_rating);
-
         setProduct(productData);
         setSelectedImage(productData.product_image_url);
+
+        // 현재 제품을 최근 본 상품 목록에 추가
+        addToRecentlyViewed(productId);
 
         // 추가 이미지 가져오기
         const { data: productImagesData, error: productImagesError } = await supabase
@@ -258,6 +314,94 @@ export default function ProductDetailPage() {
       fetchStoreAndProduct();
     }
   }, [storeId, productId, user]);
+
+  // 같은 상점의 다른 제품, 추천 상품, 최근 본 상품을 가져오는 함수
+  useEffect(() => {
+    const fetchAdditionalProducts = async () => {
+      if (!storeId || !productId || !product) return;
+      
+      setAdditionalProductsLoading(true);
+      
+      try {
+        // 1. 같은 상점의 다른 제품 (최대 4개, 현재 제품 제외)
+        const { data: otherStoreProducts, error: storeProductsError } = await supabase
+          .from('products')
+          .select('*')
+          .eq('store_id', storeId)
+          .neq('id', productId) // 현재 제품 제외
+          .eq('is_available', true) // 구매 가능한 제품만
+          .order('created_at', { ascending: false }) // 최신순
+          .limit(4);
+          
+        if (storeProductsError) {
+          console.error('같은 상점 제품 로딩 오류:', storeProductsError);
+        } else {
+          setStoreProducts(otherStoreProducts || []);
+        }
+        
+        // 2. 추천 제품 (현재 제품과 같은 카테고리 기준, 최대 4개)
+        // 만약 category 필드가 있다면 아래처럼 사용할 수 있습니다
+        let recommendedProductsQuery = supabase
+          .from('products')
+          .select('*')
+          .neq('id', productId)
+          .eq('is_available', true);
+          
+        // 카테고리나 태그 기반 추천 로직 (가정: product에 category 필드가 있다고 가정)
+        if (product.material) {
+          recommendedProductsQuery = recommendedProductsQuery.eq('material', product.material);
+        }
+        
+        const { data: recommendedProductsData, error: recommendedError } = await recommendedProductsQuery
+          .limit(4);
+          
+        if (recommendedError) {
+          console.error('추천 제품 로딩 오류:', recommendedError);
+        } else {
+          setRecommendedProducts(recommendedProductsData || []);
+        }
+        
+        // 3. 최근 본 상품 (로컬 스토리지에서 ID 가져와 데이터베이스에서 조회)
+        const recentlyViewedIds = localStorage.getItem('recentlyViewedProducts');
+        
+        if (recentlyViewedIds) {
+          const parsedIds = JSON.parse(recentlyViewedIds);
+          
+          // 현재 제품 ID 제외하고 최대 4개 ID만 사용
+          const filteredIds = parsedIds
+            .filter((id: string) => id !== productId)
+            .slice(0, 4);
+            
+          if (filteredIds.length > 0) {
+            const { data: recentProducts, error: recentError } = await supabase
+              .from('products')
+              .select('*')
+              .in('id', filteredIds)
+              .eq('is_available', true);
+              
+            if (recentError) {
+              console.error('최근 본 상품 로딩 오류:', recentError);
+            } else {
+              // filteredIds의 순서대로 정렬
+              const sortedRecentProducts = filteredIds
+                .map((id: string) => recentProducts?.find(product => product.id === id))
+                .filter(Boolean) as ProductData[];
+                
+              setRecentlyViewedProducts(sortedRecentProducts || []);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('추가 제품 데이터 로딩 중 오류:', error);
+      } finally {
+        setAdditionalProductsLoading(false);
+      }
+    };
+    
+    if (product) {
+      fetchAdditionalProducts();
+    }
+  }, [storeId, productId, product]);
 
   const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value);
@@ -683,7 +827,7 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white mt-0 md:mt-0 pt-16 sm:pt-20 md:pt-0">
       {/* Rich Editor 스타일 */}
       <style>
         {`
@@ -733,92 +877,97 @@ export default function ProductDetailPage() {
         .rich-editor ol li {
           list-style-type: decimal;
         }
+        .hide-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+        .product-image {
+          transition: transform 0.4s ease;
+          will-change: transform;
+        }
+        .product-image-container:hover .product-image {
+          transform: scale(1.08);
+        }
+        .accordion-content {
+          height: 0;
+          overflow: hidden;
+          transition: height 0.35s ease;
+          padding-left: 0;
+          padding-right: 0;
+        }
+        .accordion-content.open {
+          height: auto;
+          padding-top: 0.75rem;
+          padding-bottom: 1rem;
+        }
+        .accordion-inner {
+          opacity: 0;
+          transform: translateY(-10px);
+          transition: opacity 0.25s ease, transform 0.3s ease;
+        }
+        .accordion-content.open .accordion-inner {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .accordion-arrow {
+          transition: transform 0.3s ease;
+        }
+        .accordion-header.open .accordion-arrow {
+          transform: rotate(180deg);
+        }
         `}
       </style>
       
-      {/* 네비게이션 */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <Link href="/" className="hover:text-gray-900">홈</Link>
-              <span>/</span>
-              <Link href="/stores" className="hover:text-gray-900">스토어</Link>
-              <span>/</span>
-              <Link href={`/store/${storeId}`} className="hover:text-gray-900">{store?.store_name || '상점'}</Link>
-              <span>/</span>
-              <span className="text-gray-900">{product?.product_name || '제품'}</span>
-            </div>
-            {user && isOwner && (
-              <div className="flex items-center space-x-4">
-                <Link
-                  href={`/store/${storeId}/product/edit/${productId}`}
-                  className="text-sm text-gray-600 hover:text-gray-900 font-pretendard"
-                >
-                  수정
-                </Link>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="text-sm text-gray-600 hover:text-gray-900 font-pretendard"
-                >
-                  삭제
-                </button>
-              </div>
-            )}
-          </nav>
-        </div>
-      </div>
-
       {/* 메인 컨텐츠 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div className="w-full">
         {!loading && product && store && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-            {/* 제품 이미지 섹션 */}
-            <div>
-              {/* 메인 이미지 */}
-              <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative group mb-4">
-                {selectedImage ? (
-                  <>
-                    <img
-                      src={`${selectedImage}?quality=60&width=600`}
-                      alt={product.product_name}
-                      className="w-full h-full object-contain"
-                    />
-                    <button
-                      onClick={() => setShowImageModal(true)}
-                      className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <span className="px-4 py-2 bg-white text-gray-900 rounded-lg font-pretendard text-sm">
-                        원본 보기
-                      </span>
-                    </button>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-gray-300 text-7xl font-serif">{product.product_name.charAt(0)}</span>
-                  </div>
-                )}
-                {!product.is_available && (
-                  <div className="absolute top-4 right-4 px-4 py-2 text-sm font-medium text-white bg-black/80 backdrop-blur-sm rounded-full">
-                    품절
-                  </div>
-                )}
-              </div>
-              
-              {/* 이미지 갤러리 */}
-              {(productImages.length > 0 || product.product_image_url) && (
-                <div className="grid grid-cols-5 gap-2 mt-4">
-                  {/* 메인 제품 이미지를 첫 번째로 추가 */}
+          <div className="flex flex-col md:flex-row">
+            {/* 왼쪽: 제품 이미지 섹션 */}
+            <div 
+              className="md:w-1/2 md:sticky md:top-16 md:self-start md:max-h-[calc(100vh-120px)] md:overflow-y-auto md:hide-scrollbar" 
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              onScroll={throttle((e) => {
+                // 스크롤 이벤트 발생 시 방향 감지
+                const target = e.currentTarget;
+                const currentScrollPos = target.scrollTop;
+                
+                // 스크롤 방향에 따라 네비게이션 바를 표시하거나 숨김
+                if (currentScrollPos > prevScrollPos) {
+                  // 아래로 스크롤 - 네비게이션 바 숨김
+                  emitNavbarEvent(true);
+                } else {
+                  // 위로 스크롤 - 네비게이션 바 표시
+                  emitNavbarEvent(false);
+                }
+                
+                // 현재 스크롤 위치 저장
+                prevScrollPos = currentScrollPos;
+              }, 50)}
+            >
+              {/* 모바일 뷰 수평 슬라이드 */}
+              <div className="md:hidden w-full overflow-x-auto hide-scrollbar py-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <div className="flex flex-row space-x-2 px-4">
+                  {/* 메인 이미지 */}
                   {product.product_image_url && (
-                    <div 
-                      className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${selectedImage === product.product_image_url ? 'border-black' : 'border-transparent'}`}
-                      onClick={() => handleImageSelect(product.product_image_url!)}
-                    >
-                      <img 
-                        src={product.product_image_url} 
+                    <div className="flex-shrink-0 w-[85vw] h-[85vw] bg-[#f8f8f8] overflow-hidden relative group product-image-container">
+                      <img
+                        src={product.product_image_url}
                         alt={product.product_name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-4 product-image"
                       />
+                      <button
+                        onClick={() => setShowImageModal(true)}
+                        className="absolute inset-0 flex items-center justify-center bg-transparent"
+                        aria-label="이미지 확대"
+                      />
+                      {!product.is_available && (
+                        <div className="absolute top-4 right-4 px-4 py-2 text-xs font-medium text-white bg-black/70 backdrop-blur-sm">
+                          품절
+                        </div>
+                      )}
                     </div>
                   )}
                   
@@ -826,337 +975,388 @@ export default function ProductDetailPage() {
                   {productImages.map(image => (
                     <div 
                       key={image.id}
-                      className={`aspect-square rounded-md overflow-hidden cursor-pointer border-2 ${selectedImage === image.url ? 'border-black' : 'border-transparent'}`}
-                      onClick={() => handleImageSelect(image.url)}
+                      className="flex-shrink-0 w-[85vw] h-[85vw] bg-[#f8f8f8] overflow-hidden relative group product-image-container"
                     >
                       <img 
                         src={image.url} 
                         alt={`${product.product_name} 추가 이미지`}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-4 product-image"
+                      />
+                      <button
+                        onClick={() => {setSelectedImage(image.url); setShowImageModal(true);}}
+                        className="absolute inset-0 flex items-center justify-center bg-transparent"
+                        aria-label="이미지 확대"
                       />
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {/* 제품 정보 섹션 */}
-            <div>
-              <div className="mb-8">
-                <Link href={`/store/${storeId}`} className="group inline-flex items-center space-x-3 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
-                    {store?.store_logo_url ? (
-                      <img
-                        src={store.store_logo_url}
-                        alt={store.store_name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-gray-400 text-base font-serif">
-                          {store?.store_name?.charAt(0) || 'S'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-500 mb-1">스토어</span>
-                    <h2 className="text-base font-medium text-gray-900 group-hover:text-gray-600 transition-colors">
-                      {store?.store_name || '상점명'}
-                    </h2>
-                  </div>
-                </Link>
-
-                <h1 className="text-3xl font-pretendard text-gray-900 mb-4">{product.product_name}</h1>
-                <div className="flex items-center space-x-6 mb-6">
-                  <div className="flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                    <span className="ml-1 text-sm font-medium text-gray-600 font-pretendard">
-                      {product.average_rating?.toFixed(1) || '0.0'}
-                    </span>
-                    <span className="ml-1 text-gray-400 text-sm font-pretendard">
-                      ({reviews.length}개 리뷰)
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-500 font-pretendard">
-                    판매량: {product.total_sales || 0}개
-                  </div>
-                </div>
                 
-                <p className="text-3xl font-pretendard text-gray-900 mb-6">
-                  {product.price.toLocaleString()}원
-                </p>
-                
-                {/* 찜하기 및 장바구니 버튼 추가 */}
-                <div className="flex items-center space-x-4 mb-6">
-                  <button
-                    onClick={toggleFavorite}
-                    className={`flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                      isFavorite 
-                        ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' 
-                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
-                    }`}
-                    aria-label={isFavorite ? '찜 목록에서 제거' : '찜 목록에 추가'}
-                  >
-                    <svg 
-                      xmlns="http://www.w3.org/2000/svg" 
-                      className={`h-5 w-5 mr-2 ${isFavorite ? 'text-red-500 fill-red-500' : 'text-gray-400'}`} 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
-                      fill={isFavorite ? 'currentColor' : 'none'}
-                    >
-                      <path 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        strokeWidth={1.5} 
-                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
-                      />
-                    </svg>
-                    {isFavorite ? '찜함' : '찜하기'}
-                    {favoriteCount > 0 && (
-                      <span className="ml-1 text-xs bg-gray-200 text-gray-800 rounded-full px-2 py-0.5">
-                        {favoriteCount}
-                      </span>
-                    )}
-                  </button>
-                  
-                  <button
-                    onClick={handleAddToCart}
-                    className="flex-1 bg-black text-white py-3 rounded-md text-sm font-medium hover:bg-gray-800 transition-colors flex items-center justify-center"
-                    disabled={!product.is_available || product.stock <= 0}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    {product.is_available && product.stock > 0 ? '장바구니에 추가' : '품절'}
-                  </button>
-                </div>
-                
-                <div className="mb-6">
-                  <div className="prose prose-sm max-w-none font-pretendard">
+                {/* 페이지 인디케이터 (바) */}
+                <div className="flex justify-center space-x-1 mt-6">
+                  {[product.product_image_url, ...productImages.map(img => img.url)].map((_, index) => (
                     <div 
-                      dangerouslySetInnerHTML={{ 
-                        __html: product.product_description ? DOMPurify.sanitize(product.product_description) : '' 
-                      }}
-                      className="rich-editor text-gray-600 leading-relaxed"
-                    />
-                  </div>
-                </div>
-
-                {/* 패키지 옵션 및 도움말 서비스 섹션 추가 */}
-                <div className="mb-8 border-t border-gray-100 pt-8">
-                  {/* 패키지 및 선물 옵션 */}
-                  <div className="border-b border-gray-100 pb-4">
-                    <div className="flex justify-between items-center py-4 cursor-pointer" 
-                         onClick={() => {const elem = document.getElementById('package-options'); elem && elem.classList.toggle('hidden')}}>
-                      <h3 className="text-sm uppercase tracking-widest">패키지 & 선물</h3>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div id="package-options" className="hidden pb-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center">
-                          <input 
-                            type="radio" 
-                            id="standard-package" 
-                            name="package-option" 
-                            defaultChecked 
-                            onChange={() => {}}
-                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                          />
-                          <label htmlFor="standard-package" className="ml-2 text-sm">기본 패키지</label>
-                        </div>
-                        <div className="flex items-center">
-                          <input 
-                            type="radio" 
-                            id="gift-package" 
-                            name="package-option"
-                            onChange={() => {}}
-                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                          />
-                          <label htmlFor="gift-package" className="ml-2 text-sm">선물 포장 (+ ₩5,000)</label>
-                        </div>
-                        <div className="flex items-center">
-                          <input 
-                            type="radio" 
-                            id="premium-package" 
-                            name="package-option"
-                            onChange={() => {}}
-                            className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                          />
-                          <label htmlFor="premium-package" className="ml-2 text-sm">프리미엄 패키지 (+ ₩10,000)</label>
-                        </div>
-
-                        <div className="pt-3 text-xs text-gray-500">
-                          * 주문 확인 후 선물 포장 옵션 변경은 불가능합니다.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 배송 정보 */}
-                  <div className="border-b border-gray-100">
-                    <div className="flex justify-between items-center py-4 cursor-pointer"
-                         onClick={() => {const elem = document.getElementById('shipping-info'); elem && elem.classList.toggle('hidden')}}>
-                      <h3 className="text-sm uppercase tracking-widest">무료 일반 배송</h3>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div id="shipping-info" className="hidden pb-4">
-                      <div className="space-y-3 text-sm text-gray-600">
-                        <p>• 평일 오후 2시 이전 주문 시 당일 출고, 이후 주문은 익일 출고</p>
-                        <p>• 주문 후 평균 2-3일 이내 수령 (토/일/공휴일 제외)</p>
-                        <p>• 도서산간 지역은 추가 배송일 소요될 수 있음</p>
-                        <p>• 결제 완료 후 배송 조회 가능</p>
-                        <p>• 전국 무료 배송 (제주/도서산간 지역 동일)</p>
-                        <div className="mt-4">
-                          <h4 className="font-medium">프리미엄 배송 (선택 가능)</h4>
-                          <p className="mt-1">• 당일 배송: 서울 지역 오전 11시 이전 주문 시 (+ ₩5,000)</p>
-                          <p>• 퀵 배송: 서울/경기 일부 지역 (+ ₩10,000~)</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 반품 및 교환 정책 */}
-                  <div className="border-b border-gray-100">
-                    <div className="flex justify-between items-center py-4 cursor-pointer"
-                         onClick={() => {const elem = document.getElementById('return-policy'); elem && elem.classList.toggle('hidden')}}>
-                      <h3 className="text-sm uppercase tracking-widest">반품 관련 배송 정책</h3>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div id="return-policy" className="hidden pb-4">
-                      <div className="space-y-3 text-sm text-gray-600">
-                        <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
-                        <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
-                        <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
-                        <p>• 일부 주문 제작 상품의 경우 교환/반품이 제한될 수 있음</p>
-                        <p className="font-medium mt-2">반품 불가 상품</p>
-                        <p>• 고객의 사용, 착용, 세탁 등으로 상품 가치가 훼손된 경우</p>
-                        <p>• 밀봉 포장을 개봉하거나 포장이 훼손되어 상품가치가 상실된 경우</p>
-                        <p>• 시간 경과에 따라 재판매가 어려운 상품의 경우</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 결제 방식 */}
-                  <div>
-                    <div className="flex justify-between items-center py-4 cursor-pointer"
-                         onClick={() => {const elem = document.getElementById('payment-methods'); elem && elem.classList.toggle('hidden')}}>
-                      <h3 className="text-sm uppercase tracking-widest">결제 방식</h3>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div id="payment-methods" className="hidden pb-4">
-                      <div className="space-y-3 text-sm text-gray-600">
-                        <p>• 신용카드: 국내외 모든 신용/체크카드</p>
-                        <p>• 간편결제: 카카오페이, 네이버페이, 토스, 페이코</p>
-                        <p>• 계좌이체: 실시간 계좌이체</p>
-                        <p>• 가상계좌: 무통장입금 (입금 확인 후 상품 출고)</p>
-                        <p className="mt-3">* 모든 결제는 암호화된 보안 프로토콜을 통해 처리됩니다.</p>
-                        <p>* 해외 카드 결제 시 별도의 수수료가 부과될 수 있습니다.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* 구매 옵션 */}
-              <div className="mb-8">
-                <div className="flex items-center space-x-4 mb-6">
-                  <div className="flex items-center border border-gray-200">
-                    <button 
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="px-4 py-2 text-gray-600 hover:bg-gray-50"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max={product.stock}
-                      value={quantity}
-                      onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                      className="w-16 text-center border-x border-gray-200 py-2 focus:outline-none"
-                    />
-                    <button 
-                      onClick={() => setQuantity(Math.min(product.stock || 1, quantity + 1))}
-                      className="px-4 py-2 text-gray-600 hover:bg-gray-50"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    재고: {product.stock}개
-                  </div>
-                </div>
-
-                <div className="flex space-x-4">
-                  <button
-                    onClick={handleAddToCart}
-                    disabled={!product.is_available}
-                    className={`flex-1 px-8 py-4 text-sm uppercase tracking-widest font-medium ${
-                      product.is_available
-                        ? 'bg-black text-white hover:bg-gray-800'
-                        : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                    } transition-colors`}
-                  >
-                    장바구니에 추가
-                  </button>
-                  <button
-                    onClick={() => {/* 구매하기 기능 */}}
-                    disabled={!product.is_available}
-                    className={`flex-1 px-8 py-4 text-sm uppercase tracking-widest font-medium border border-black ${
-                      product.is_available
-                        ? 'text-black hover:bg-gray-50'
-                        : 'text-gray-500 border-gray-300 cursor-not-allowed'
-                    } transition-colors`}
-                  >
-                    바로 구매
-                  </button>
+                      key={index} 
+                      className={`h-0.5 ${
+                        index === 0 ? 'w-6 bg-black' : 'w-3 bg-gray-300'
+                      } transition-all duration-300`}
+                    ></div>
+                  ))}
                 </div>
               </div>
-
-              {/* 공유 및 관심 */}
-              <div className="flex items-center space-x-6 border-t border-gray-100 pt-6">
-                <div className="flex items-center space-x-4">
-                  <button className="text-gray-500 hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                    </svg>
-                  </button>
-                  <button className="text-gray-500 hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.259-.012 3.668-.069 4.948-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                    </svg>
-                  </button>
-                  <button className="text-gray-500 hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/>
-                    </svg>
-                  </button>
-                </div>
-                {user && (
-                  <button
-                    onClick={toggleFavorite}
-                    className={`flex items-center space-x-2 ${
-                      isFavorite ? 'text-red-500' : 'text-gray-500'
-                    } hover:text-red-500 transition-colors`}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={isFavorite ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                    </svg>
-                    <span className="text-sm">관심상품</span>
-                  </button>
+              
+              {/* 데스크톱 뷰 수직 레이아웃 */}
+              <div className="hidden md:block space-y-4 pr-8" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {/* 메인 제품 이미지 */}
+                {product.product_image_url && (
+                  <div className="w-full aspect-square bg-[#f8f8f8] overflow-hidden relative group product-image-container">
+                    <img
+                      src={product.product_image_url}
+                      alt={product.product_name}
+                      className="w-full h-full object-contain p-4 product-image"
+                    />
+                    <button
+                      onClick={() => setShowImageModal(true)}
+                      className="absolute inset-0 flex items-center justify-center bg-transparent"
+                      aria-label="이미지 확대"
+                    />
+                    {!product.is_available && (
+                      <div className="absolute top-4 right-4 px-4 py-2 text-xs font-medium text-white bg-black/70 backdrop-blur-sm">
+                        품절
+                      </div>
+                    )}
+                  </div>
                 )}
+                
+                {/* 추가 이미지들 - 수직으로 나열 */}
+                {productImages.map(image => (
+                  <div 
+                    key={image.id}
+                    className="w-full aspect-square bg-[#f8f8f8] overflow-hidden relative group product-image-container"
+                  >
+                    <img 
+                      src={image.url} 
+                      alt={`${product.product_name} 추가 이미지`}
+                      className="w-full h-full object-contain p-4 product-image"
+                    />
+                    <button
+                      onClick={() => {setSelectedImage(image.url); setShowImageModal(true);}}
+                      className="absolute inset-0 flex items-center justify-center bg-transparent"
+                      aria-label="이미지 확대"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* 오른쪽: 제품 정보 섹션 */}
+            <div className="md:w-1/2 pl-0 md:pl-8 lg:pl-12 px-5 sm:px-6 md:px-0">
+              <div className="h-full flex flex-col md:max-w-md md:ml-8 lg:ml-16">
+                {/* 상단 여백 */}
+                <div className="flex-grow mb-auto md:min-h-[250px] lg:min-h-[300px]"></div>
+                
+                {/* 제품 정보 콘텐츠 */}
+                <div>
+                  <div className="mb-10">
+                    <Link href={`/store/${storeId}`} className="inline-block mb-2">
+                      <h2 className="text-sm uppercase tracking-widest text-gray-600 font-medium">
+                        {store?.store_name || '상점명'}
+                      </h2>
+                    </Link>
+
+                    <h1 className="text-2xl font-medium text-gray-900 mb-6">{product.product_name}</h1>
+                    
+                    <p className="text-lg text-gray-900 mb-8">
+                      {product.price.toLocaleString()}원
+                    </p>
+                    
+                    <div className="mb-12">
+                      <div className="prose prose-sm max-w-none font-pretendard">
+                        <div 
+                          dangerouslySetInnerHTML={{ 
+                            __html: product.product_description ? DOMPurify.sanitize(product.product_description) : '' 
+                          }}
+                          className="rich-editor text-gray-600 leading-relaxed text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 제품 세부 정보 아코디언 */}
+                  <div className="mb-10 space-y-5">
+                    {/* 패키지 및 선물 옵션 */}
+                    <div className="border-t border-gray-200">
+                      <div 
+                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
+                        onClick={() => {
+                          const header = document.querySelector(`[data-accordion="package-options"]`);
+                          const content = document.getElementById('package-options');
+                          if (header && content) {
+                            header.classList.toggle('open');
+                            content.classList.toggle('open');
+                            
+                            // 높이 자동 계산을 위한 처리
+                            if (content.classList.contains('open')) {
+                              const inner = content.querySelector('.accordion-inner');
+                              if (inner) {
+                                const height = inner.getBoundingClientRect().height;
+                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
+                              }
+                            } else {
+                              content.style.height = '0';
+                            }
+                          }
+                        }}
+                        data-accordion="package-options"
+                      >
+                        <h3 className="text-sm uppercase tracking-widest font-medium">패키지 옵션</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      <div id="package-options" className="accordion-content">
+                        <div className="accordion-inner space-y-4">
+                          <div className="flex items-center">
+                            <input 
+                              type="radio" 
+                              id="standard-package" 
+                              name="package-option" 
+                              defaultChecked 
+                              onChange={() => {}}
+                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                            />
+                            <label htmlFor="standard-package" className="ml-2 text-sm">기본 패키지</label>
+                          </div>
+                          <div className="flex items-center">
+                            <input 
+                              type="radio" 
+                              id="gift-package" 
+                              name="package-option"
+                              onChange={() => {}}
+                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                            />
+                            <label htmlFor="gift-package" className="ml-2 text-sm">선물 포장 (+ ₩5,000)</label>
+                          </div>
+                          <div className="flex items-center">
+                            <input 
+                              type="radio" 
+                              id="premium-package" 
+                              name="package-option"
+                              onChange={() => {}}
+                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                            />
+                            <label htmlFor="premium-package" className="ml-2 text-sm">프리미엄 패키지 (+ ₩10,000)</label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 배송 정보 */}
+                    <div className="border-t border-gray-200">
+                      <div 
+                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
+                        onClick={() => {
+                          const header = document.querySelector(`[data-accordion="shipping-info"]`);
+                          const content = document.getElementById('shipping-info');
+                          if (header && content) {
+                            header.classList.toggle('open');
+                            content.classList.toggle('open');
+                            
+                            // 높이 자동 계산을 위한 처리
+                            if (content.classList.contains('open')) {
+                              const inner = content.querySelector('.accordion-inner');
+                              if (inner) {
+                                const height = inner.getBoundingClientRect().height;
+                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
+                              }
+                            } else {
+                              content.style.height = '0';
+                            }
+                          }
+                        }}
+                        data-accordion="shipping-info"
+                      >
+                        <h3 className="text-sm uppercase tracking-widest font-medium">배송 안내</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      <div id="shipping-info" className="accordion-content">
+                        <div className="accordion-inner space-y-2 text-sm text-gray-600">
+                          {product && product.shipping_info ? (
+                            <div dangerouslySetInnerHTML={{ __html: product.shipping_info.replace(/\n/g, '<br/>') }} />
+                          ) : (
+                            <>
+                              <p>• 평일 오후 2시 이전 주문 시 당일 출고</p>
+                              <p>• 주문 후 평균 2-3일 이내 수령</p>
+                              <p>• 전국 무료 배송</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 반품 정책 */}
+                    <div className="border-t border-gray-200">
+                      <div 
+                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
+                        onClick={() => {
+                          const header = document.querySelector(`[data-accordion="return-policy"]`);
+                          const content = document.getElementById('return-policy');
+                          if (header && content) {
+                            header.classList.toggle('open');
+                            content.classList.toggle('open');
+                            
+                            // 높이 자동 계산을 위한 처리
+                            if (content.classList.contains('open')) {
+                              const inner = content.querySelector('.accordion-inner');
+                              if (inner) {
+                                const height = inner.getBoundingClientRect().height;
+                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
+                              }
+                            } else {
+                              content.style.height = '0';
+                            }
+                          }
+                        }}
+                        data-accordion="return-policy"
+                      >
+                        <h3 className="text-sm uppercase tracking-widest font-medium">반품 정책</h3>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      <div id="return-policy" className="accordion-content">
+                        <div className="accordion-inner space-y-2 text-sm text-gray-600">
+                          {product && product.return_policy ? (
+                            <div dangerouslySetInnerHTML={{ __html: product.return_policy.replace(/\n/g, '<br/>') }} />
+                          ) : (
+                            <>
+                              <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
+                              <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
+                              <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 구매 옵션 */}
+                  <div className="mb-12 space-y-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center border border-gray-300">
+                        <button 
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          className="px-4 py-2 text-gray-600 hover:bg-gray-50"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max={product.stock}
+                          value={quantity}
+                          onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                          className="w-12 text-center border-x border-gray-300 py-2 focus:outline-none text-sm"
+                        />
+                        <button 
+                          onClick={() => setQuantity(Math.min(product.stock || 1, quantity + 1))}
+                          className="px-4 py-2 text-gray-600 hover:bg-gray-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        재고: {product.stock}개
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <button
+                        onClick={handleAddToCart}
+                        disabled={!product.is_available}
+                        className={`w-full py-4 text-sm uppercase tracking-widest font-medium ${
+                          product.is_available
+                            ? 'bg-black text-white hover:bg-gray-900'
+                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                        } transition-colors`}
+                      >
+                        장바구니에 추가
+                      </button>
+                      <button
+                        onClick={() => {/* 구매하기 기능 */}}
+                        disabled={!product.is_available}
+                        className={`w-full py-4 text-sm uppercase tracking-widest font-medium border ${
+                          product.is_available
+                            ? 'border-black text-black hover:bg-gray-50'
+                            : 'border-gray-300 text-gray-500 cursor-not-allowed'
+                        } transition-colors`}
+                      >
+                        바로 구매하기
+                      </button>
+                      <button
+                        onClick={toggleFavorite}
+                        className={`w-full flex items-center justify-center py-4 text-sm uppercase tracking-widest font-medium ${
+                          isFavorite 
+                            ? 'bg-gray-50 text-black border border-gray-300' 
+                            : 'bg-white text-gray-700 border border-gray-200'
+                        } transition-colors`}
+                      >
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          className={`h-4 w-4 mr-2 ${isFavorite ? 'text-black fill-black' : 'text-gray-500'}`} 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                          fill={isFavorite ? 'currentColor' : 'none'}
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={1.5} 
+                            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
+                          />
+                        </svg>
+                        {isFavorite ? '관심 상품 해제' : '관심 상품 등록'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 공유 */}
+                  <div className="pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-center space-x-8">
+                      <button className="text-gray-600 hover:text-black transition-colors">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                      </button>
+                      <button className="text-gray-600 hover:text-black transition-colors">
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.259-.012 3.668-.069 4.948-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* 관리 버튼 (소유자만) */}
+                  {user && isOwner && (
+                    <div className="mt-8 pt-4 border-t border-gray-200">
+                      <div className="flex justify-center space-x-6">
+                        <Link
+                          href={`/store/${storeId}/product/edit/${productId}`}
+                          className="text-xs uppercase tracking-widest text-gray-600 hover:text-black transition-colors"
+                        >
+                          편집
+                        </Link>
+                        <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="text-xs uppercase tracking-widest text-gray-600 hover:text-black transition-colors"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1165,18 +1365,18 @@ export default function ProductDetailPage() {
 
       {/* 이미지 상세보기 모달 */}
       {showImageModal && selectedImage && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-          <div className="relative max-w-5xl w-full">
-            <button
-              className="absolute top-0 right-0 p-2 text-white hover:text-gray-300 z-10"
-              onClick={() => setShowImageModal(false)}
-            >
-              <X className="w-8 h-8" />
-            </button>
+        <div className="fixed inset-0 bg-white z-50 p-4 md:p-8 overflow-auto">
+          <button
+            className="absolute top-6 right-6 p-2 text-gray-900 hover:text-gray-600 z-10"
+            onClick={() => setShowImageModal(false)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div className="flex items-center justify-center min-h-full">
             <img
               src={selectedImage}
               alt={product?.product_name}
-              className="w-full h-auto object-contain"
+              className="max-w-full max-h-[85vh] object-contain p-4 md:p-8"
             />
           </div>
         </div>
@@ -1185,27 +1385,132 @@ export default function ProductDetailPage() {
       {/* 삭제 확인 모달 */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-8 max-w-md w-full">
-            <h3 className="text-lg font-medium text-black mb-4">제품 삭제</h3>
-            <p className="text-gray-600 mb-6 font-light">
+          <div className="bg-white p-6 max-w-md w-full">
+            <h3 className="text-base font-medium text-black mb-4">제품 삭제</h3>
+            <p className="text-sm text-gray-600 mb-6">
               <strong>{product.product_name}</strong> 제품을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.
             </p>
             
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="px-6 py-2.5 border border-gray-300 text-xs uppercase tracking-widest font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-xs uppercase tracking-wider font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 취소
               </button>
               <button
                 onClick={handleDeleteProduct}
                 disabled={deleteLoading}
-                className="px-6 py-2.5 bg-red-600 text-white hover:bg-red-700 transition-colors text-xs uppercase tracking-widest font-medium disabled:opacity-50"
+                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 transition-colors text-xs uppercase tracking-wider font-medium disabled:opacity-50"
               >
                 {deleteLoading ? '삭제 중...' : '삭제'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 추가 제품 배너 섹션 */}
+      {!loading && product && store && (
+        <div className="w-full bg-white py-10 mt-12 border-t border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* 같은 상점의 다른 제품 */}
+            {storeProducts.length > 0 && (
+              <div className="mb-12">
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                  {store.store_name}의 다른 제품
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
+                  {storeProducts.map((storeProduct) => (
+                    <Link key={storeProduct.id} href={`/store/${storeId}/product/${storeProduct.id}`} className="group">
+                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
+                        {storeProduct.product_image_url ? (
+                          <img 
+                            src={storeProduct.product_image_url} 
+                            alt={storeProduct.product_name} 
+                            className="w-full h-full object-contain p-4"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-medium text-gray-900 truncate">{storeProduct.product_name}</h3>
+                        <p className="text-sm text-gray-700">{storeProduct.price.toLocaleString()}원</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                <div className="flex justify-center mt-8">
+                  <Link href={`/store/${storeId}`} className="px-6 py-3 border border-gray-200 text-xs uppercase tracking-widest font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    더 보기
+                  </Link>
+                </div>
+              </div>
+            )}
+            
+            {/* 추천 상품 */}
+            {recommendedProducts.length > 0 && (
+              <div className="mb-12">
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                  추천 상품
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
+                  {recommendedProducts.map((recProduct) => (
+                    <Link key={recProduct.id} href={`/store/${recProduct.store_id}/product/${recProduct.id}`} className="group">
+                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
+                        {recProduct.product_image_url ? (
+                          <img 
+                            src={recProduct.product_image_url} 
+                            alt={recProduct.product_name} 
+                            className="w-full h-full object-contain p-4"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-medium text-gray-900 truncate">{recProduct.product_name}</h3>
+                        <p className="text-sm text-gray-700">{recProduct.price.toLocaleString()}원</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* 최근 본 상품 */}
+            {recentlyViewedProducts.length > 0 && (
+              <div>
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                  최근 본 상품
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
+                  {recentlyViewedProducts.map((recentProduct) => (
+                    <Link key={recentProduct.id} href={`/store/${recentProduct.store_id}/product/${recentProduct.id}`} className="group">
+                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
+                        {recentProduct.product_image_url ? (
+                          <img 
+                            src={recentProduct.product_image_url} 
+                            alt={recentProduct.product_name} 
+                            className="w-full h-full object-contain p-4"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-medium text-gray-900 truncate">{recentProduct.product_name}</h3>
+                        <p className="text-sm text-gray-700">{recentProduct.price.toLocaleString()}원</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

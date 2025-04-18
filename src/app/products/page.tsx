@@ -16,7 +16,7 @@ export default function ProductsPage() {
     <ProductListPage
       title="COLLECTION"
       subtitle="엄선된 프리미엄 제품들을 만나보세요"
-      backgroundImage="https://images.unsplash.com/photo-1542272201-b1ca555f8222?q=80&w=3387&auto=format&fit=crop"
+      backgroundImage="https://gbqguwfaqhmbdypbghqo.supabase.co/storage/v1/object/public/images/adimages/mainAD.jpg"
       categories={productCategories}
       productFilter="" // 빈 필터로 모든 제품 표시
       categoryType="uppercase"

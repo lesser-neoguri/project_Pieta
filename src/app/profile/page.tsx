@@ -48,6 +48,10 @@ export default function ProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -106,6 +110,33 @@ export default function ProfilePage() {
     fetchUserData();
   }, [user]);
 
+  // 회원 탈퇴 함수
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== '회원탈퇴') {
+      setDeleteError('확인 문구가 일치하지 않습니다.');
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
+
+      // 회원 탈퇴 함수 호출 (이전에 만든 DB 함수)
+      const { data, error } = await supabase
+        .rpc('delete_user_account');
+
+      if (error) throw error;
+
+      // 탈퇴 성공 시 로그아웃하고 홈으로 이동
+      await signOut();
+      router.push('/');
+    } catch (error: any) {
+      console.error('회원 탈퇴 오류:', error);
+      setDeleteError(error.message || '회원 탈퇴 처리 중 오류가 발생했습니다.');
+      setIsDeleting(false);
+    }
+  };
+
   if (loading || loadingProfile) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -133,6 +164,63 @@ export default function ProfilePage() {
   if (!user || !userData) {
     return null;
   }
+
+  // 회원 탈퇴 확인 모달
+  const DeleteConfirmModal = () => (
+    <div className={`fixed inset-0 z-[60] bg-black bg-opacity-50 flex items-center justify-center ${showDeleteModal ? 'block' : 'hidden'}`}>
+      <div className="bg-white rounded-lg w-[90%] max-w-md p-6 shadow-xl">
+        <h3 className="text-xl font-medium mb-4 text-red-600">회원 탈퇴</h3>
+        <p className="text-gray-700 mb-4">
+          회원 탈퇴 시 개인 정보 및 이용 기록이 모두 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+        </p>
+        
+        {userData?.user_type === 'vendor' && (
+          <div className="mb-4 p-3 bg-yellow-50 text-yellow-800 rounded border border-yellow-200">
+            <p className="text-sm font-medium">판매자 계정 주의사항</p>
+            <p className="text-xs mt-1">판매 중인 상품이 있는 경우 탈퇴가 불가능합니다. 모든 상품을 삭제하거나 비활성화한 후 탈퇴해주세요.</p>
+          </div>
+        )}
+        
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            탈퇴를 진행하려면 &apos;회원탈퇴&apos;를 입력하세요
+          </label>
+          <input
+            type="text"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="회원탈퇴"
+          />
+        </div>
+        
+        {deleteError && (
+          <p className="text-red-600 text-sm mb-4">{deleteError}</p>
+        )}
+        
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={() => {
+              setShowDeleteModal(false);
+              setDeleteConfirmText('');
+              setDeleteError(null);
+            }}
+            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md"
+            disabled={isDeleting}
+          >
+            취소
+          </button>
+          <button
+            onClick={handleDeleteAccount}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md disabled:bg-red-300"
+            disabled={deleteConfirmText !== '회원탈퇴' || isDeleting}
+          >
+            {isDeleting ? '처리 중...' : '탈퇴하기'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-25 z-50">
@@ -340,8 +428,14 @@ export default function ProfilePage() {
               {/* 하단 버튼 */}
               <div className="pt-4 border-t border-gray-200">
                 <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="w-full text-center px-4 py-2 text-sm text-red-600 hover:text-red-700 transition-colors mb-2"
+                >
+                  회원 탈퇴
+                </button>
+                <button
                   onClick={signOut}
-                  className="w-full text-center px-4 py-2 text-sm text-red-600 hover:text-red-700 transition-colors"
+                  className="w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-700 transition-colors"
                 >
                   로그아웃
                 </button>
@@ -350,6 +444,9 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+      
+      {/* 회원 탈퇴 모달 */}
+      <DeleteConfirmModal />
     </div>
   );
 } 

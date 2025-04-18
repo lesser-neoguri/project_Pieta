@@ -4,29 +4,53 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTransition } from '@/contexts/TransitionContext';
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const { user } = useAuth();
+  const { handleNavigate } = useTransition();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // 제품보러가기 클릭 핸들러
+  const handleProductsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    handleNavigate('/products');
+  };
+
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section - 여백 없이 전체 너비 사용 */}
-      <div className="h-screen w-full relative">
-        {/* Background Image */}
-        <div className="absolute inset-0 z-0">
-          <Image
-            src="/images/hero-bg.jpg"
-            alt="Background"
-            fill
-            className="object-cover"
-            priority
-          />
-          <div className="absolute inset-0 bg-black bg-opacity-30" />
+      <div className="h-screen w-full relative overflow-hidden">
+        {/* Background Video */}
+        <div className="absolute inset-0 z-0 w-full h-full">
+          {/* 비디오 또는 이미지 배경 */}
+          <div className="relative w-full h-full">
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="absolute w-full h-full object-cover"
+              poster="/images/hero-bg.jpg" // 비디오 로딩 전에 표시할 이미지
+            >
+              <source src="https://gbqguwfaqhmbdypbghqo.supabase.co/storage/v1/object/public/images/mainVD.mp4" type="video/mp4" />
+              {/* 비디오 로드 실패 시 이미지로 폴백 */}
+            </video>
+            {/* 폴백 이미지 - 비디오 실패 시 표시 */}
+            <Image
+              src="/images/hero-bg.jpg"
+              alt="Background"
+              fill
+              className="object-cover z-[-1]"
+              priority
+            />
+          </div>
+          {/* 비디오/이미지 위에 그라데이션 오버레이 추가 */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/30" />
         </div>
 
         {/* Content */}
@@ -61,12 +85,13 @@ export default function HomePage() {
                   </Link>
                 </>
               ) : null}
-              <Link
+              <a
                 href="/products"
+                onClick={handleProductsClick}
                 className="inline-block px-8 py-4 bg-white/20 backdrop-blur-sm text-white text-sm tracking-widest uppercase hover:bg-white hover:text-black transition-colors duration-300"
               >
                 제품보러가기
-              </Link>
+              </a>
             </div>
           </div>
 
@@ -93,19 +118,20 @@ export default function HomePage() {
 
       {/* Collection Banner Section - 여백 없이 전체 너비 사용 */}
       <div className="w-full bg-gray-200 relative">
-        <div className="py-20 text-center relative z-10">
+        <div className="py-24 text-center relative z-10">
           <p className="text-sm uppercase tracking-widest mb-2">프리미엄 컬렉션</p>
           <h2 className="text-4xl font-light uppercase tracking-[0.2em] mb-6">COLLECTION</h2>
-          <p className="text-sm mb-6">엄선된 프리미엄 제품들을 만나보세요</p>
-          <Link 
+          <p className="text-sm mb-8">엄선된 프리미엄 제품들을 만나보세요</p>
+          <a 
             href="/products" 
-            className="inline-block px-8 py-3 border border-black text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
+            onClick={handleProductsClick}
+            className="inline-block px-10 py-3 border border-black text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
           >
             더 알아보기
-          </Link>
+          </a>
         </div>
-        {/* 배경 이미지 추가 (필요시) */}
-        <div className="absolute inset-0 z-0 opacity-30">
+        {/* 배경 이미지 투명도 조정 */}
+        <div className="absolute inset-0 z-0 opacity-40">
           <Image
             src="/images/collection-bg.jpg"
             alt="Collection"

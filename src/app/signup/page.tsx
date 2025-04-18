@@ -67,24 +67,6 @@ export default function SignupPage() {
           </Link>
         </div>
       </main>
-
-      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 ${
-        isScrolled ? 'opacity-0' : 'opacity-100'
-      }`}>
-        <div className="animate-bounce bg-gray-900 bg-opacity-10 rounded-full p-2">
-          <svg 
-            className="w-5 h-5 text-gray-500" 
-            fill="none" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-            strokeWidth="2" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
-          >
-            <path d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
-          </svg>
-        </div>
-      </div>
     </div>
   );
 } 
