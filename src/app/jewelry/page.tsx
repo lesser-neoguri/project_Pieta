@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ProductListPage, { CategoryItem } from '@/components/ProductListPage';
 import { supabase } from '@/lib/supabase';
@@ -14,7 +14,7 @@ const jewelryCategories: CategoryItem[] = [
   { id: 'sets', name: '세트' }
 ];
 
-export default function JewelryPage() {
+function JewelryPageContent() {
   const searchParams = useSearchParams();
   // null 안전성을 위한 옵셔널 체이닝 사용
   const categoryParam = searchParams?.get('category') || null;
@@ -157,5 +157,13 @@ export default function JewelryPage() {
       onCategoryChange={setSelectedCategory}
       forceRefreshKey={forceRefresh}
     />
+  );
+}
+
+export default function JewelryPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">로딩 중...</div>}>
+      <JewelryPageContent />
+    </Suspense>
   );
 } 
