@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProductForm from '@/components/ProductForm';
-import { X } from 'lucide-react';
+import { X, Trash2, ChevronUp, ChevronDown, Check, PlusIcon, Loader2 } from 'lucide-react';
+import { deleteImageFromStorage } from '@/lib/supabase';
 
 // 네비게이션 바 컨트롤을 위한 사용자 정의 이벤트 추가
 const emitNavbarEvent = (hide: boolean) => {
@@ -52,6 +53,9 @@ type ProductData = {
   warranty?: string;
   shipping_info?: string;
   return_policy?: string;
+  main_category?: string;
+  category?: string;
+  subcategory?: string;
 };
 
 // 파일 상단에 추가할 타입 정의
@@ -65,6 +69,208 @@ type PolicyTemplate = {
   updated_at: string;
   store_id: string | null;
 };
+
+// 카테고리 타입 정의
+type MainCategory = {
+  id: string;
+  name: string;
+  categories: Category[];
+};
+
+type Category = {
+  id: string;
+  name: string;
+  subcategories: SubCategory[];
+};
+
+type SubCategory = {
+  id: string;
+  name: string;
+};
+
+// 대분류-중분류-소분류 카테고리 데이터
+const mainCategories: MainCategory[] = [
+  {
+    id: 'jewelry',
+    name: '주얼리',
+    categories: [
+      {
+        id: 'rings',
+        name: '반지',
+        subcategories: [
+          { id: 'wedding_rings', name: '웨딩링/커플링' },
+          { id: 'engagement_rings', name: '약혼반지' },
+          { id: 'statement_rings', name: '스테이트먼트 반지' },
+          { id: 'band_rings', name: '밴드형 반지' },
+          { id: 'signet_rings', name: '인장 반지' },
+          { id: 'other_rings', name: '기타 반지' }
+        ]
+      },
+      {
+        id: 'necklaces',
+        name: '목걸이',
+        subcategories: [
+          { id: 'pendants', name: '펜던트' },
+          { id: 'chokers', name: '초커' },
+          { id: 'chains', name: '체인' },
+          { id: 'statement_necklaces', name: '스테이트먼트 목걸이' },
+          { id: 'layered_necklaces', name: '레이어드 목걸이' },
+          { id: 'other_necklaces', name: '기타 목걸이' }
+        ]
+      },
+      {
+        id: 'earrings',
+        name: '귀걸이',
+        subcategories: [
+          { id: 'studs', name: '스터드 귀걸이' },
+          { id: 'hoops', name: '후프 귀걸이' },
+          { id: 'drops', name: '드롭 귀걸이' },
+          { id: 'climbers', name: '이어클라이머' },
+          { id: 'cuffs', name: '이어커프' },
+          { id: 'other_earrings', name: '기타 귀걸이' }
+        ]
+      },
+      {
+        id: 'bracelets',
+        name: '팔찌',
+        subcategories: [
+          { id: 'bangles', name: '뱅글' },
+          { id: 'chain_bracelets', name: '체인 팔찌' },
+          { id: 'cuffs_bracelets', name: '커프 팔찌' },
+          { id: 'charm_bracelets', name: '참 팔찌' },
+          { id: 'tennis_bracelets', name: '테니스 팔찌' },
+          { id: 'other_bracelets', name: '기타 팔찌' }
+        ]
+      },
+      {
+        id: 'watches',
+        name: '시계',
+        subcategories: [
+          { id: 'analog_watches', name: '아날로그 시계' },
+          { id: 'digital_watches', name: '디지털 시계' },
+          { id: 'smart_watches', name: '스마트 시계' },
+          { id: 'luxury_watches', name: '럭셔리 시계' },
+          { id: 'casual_watches', name: '캐주얼 시계' },
+          { id: 'other_watches', name: '기타 시계' }
+        ]
+      },
+      {
+        id: 'jewelry_others',
+        name: '기타 주얼리',
+        subcategories: [
+          { id: 'anklets', name: '발찌' },
+          { id: 'brooches', name: '브로치' },
+          { id: 'hair_accessories', name: '헤어 액세서리' },
+          { id: 'body_jewelry', name: '바디 주얼리' },
+          { id: 'key_chains', name: '키체인' },
+          { id: 'other_jewelry', name: '기타 액세서리' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'clothing',
+    name: '의류',
+    categories: [
+      {
+        id: 'tops',
+        name: '상의',
+        subcategories: [
+          { id: 't_shirts', name: '티셔츠' },
+          { id: 'blouses', name: '블라우스/셔츠' },
+          { id: 'sweaters', name: '니트/스웨터' },
+          { id: 'hoodies', name: '후드/맨투맨' },
+          { id: 'jackets', name: '자켓/코트' },
+          { id: 'other_tops', name: '기타 상의' }
+        ]
+      },
+      {
+        id: 'bottoms',
+        name: '하의',
+        subcategories: [
+          { id: 'pants', name: '팬츠/슬랙스' },
+          { id: 'jeans', name: '청바지' },
+          { id: 'skirts', name: '스커트' },
+          { id: 'shorts', name: '반바지' },
+          { id: 'leggings', name: '레깅스' },
+          { id: 'other_bottoms', name: '기타 하의' }
+        ]
+      },
+      {
+        id: 'dresses',
+        name: '원피스/드레스',
+        subcategories: [
+          { id: 'casual_dresses', name: '캐주얼 원피스' },
+          { id: 'formal_dresses', name: '포멀 드레스' },
+          { id: 'mini_dresses', name: '미니 원피스' },
+          { id: 'maxi_dresses', name: '맥시 원피스' },
+          { id: 'wedding_dresses', name: '웨딩 드레스' },
+          { id: 'other_dresses', name: '기타 원피스' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'bags',
+    name: '가방',
+    categories: [
+      {
+        id: 'handbags',
+        name: '핸드백',
+        subcategories: [
+          { id: 'shoulder_bags', name: '숄더백' },
+          { id: 'tote_bags', name: '토트백' },
+          { id: 'crossbody_bags', name: '크로스바디백' },
+          { id: 'clutches', name: '클러치' },
+          { id: 'mini_bags', name: '미니백' },
+          { id: 'other_handbags', name: '기타 핸드백' }
+        ]
+      },
+      {
+        id: 'backpacks',
+        name: '백팩/스포츠',
+        subcategories: [
+          { id: 'casual_backpacks', name: '캐주얼 백팩' },
+          { id: 'laptop_backpacks', name: '노트북 백팩' },
+          { id: 'sport_bags', name: '스포츠백' },
+          { id: 'drawstring_bags', name: '드로스트링백' },
+          { id: 'hiking_backpacks', name: '등산용 백팩' },
+          { id: 'other_backpacks', name: '기타 백팩' }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'accessories',
+    name: '액세서리',
+    categories: [
+      {
+        id: 'hats',
+        name: '모자',
+        subcategories: [
+          { id: 'baseball_caps', name: '볼캡' },
+          { id: 'beanies', name: '비니' },
+          { id: 'bucket_hats', name: '버킷햇' },
+          { id: 'fedoras', name: '페도라' },
+          { id: 'sun_hats', name: '썬햇' },
+          { id: 'other_hats', name: '기타 모자' }
+        ]
+      },
+      {
+        id: 'scarves',
+        name: '스카프/장갑',
+        subcategories: [
+          { id: 'winter_scarves', name: '겨울용 스카프' },
+          { id: 'fashion_scarves', name: '패션 스카프' },
+          { id: 'mufflers', name: '머플러' },
+          { id: 'gloves', name: '장갑' },
+          { id: 'mittens', name: '벙어리 장갑' },
+          { id: 'other_scarves', name: '기타 스카프/장갑' }
+        ]
+      }
+    ]
+  }
+];
 
 export default function EditProductPage() {
   const { user } = useAuth();
@@ -94,6 +300,16 @@ export default function EditProductPage() {
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [editNumberValue, setEditNumberValue] = useState<number>(0);
+
+  const [saving, setSaving] = useState(false);
+
+  // 카테고리 선택 상태 추가
+  const [selectedMainCategory, setSelectedMainCategory] = useState<string | undefined>(product?.main_category || '');
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(product?.category || '');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | undefined>(product?.subcategory || '');
+  
+  const [availableCategories, setAvailableCategories] = useState<Category[]>([]);
+  const [availableSubcategories, setAvailableSubcategories] = useState<SubCategory[]>([]);
 
   // 레퍼런스 템플릿 추가
   const shippingTemplate = `■ 배송 안내
@@ -484,9 +700,6 @@ export default function EditProductPage() {
       const imageToRemove = existingImages.find(img => img.id === id);
       if (!imageToRemove) return;
       
-      // 이미지 URL에서 파일 경로 추출
-      const filePath = extractFilePathFromUrl(imageToRemove.url);
-      
       // DB에서 이미지 정보 삭제
       const { error } = await supabase
         .from('product_images')
@@ -495,11 +708,9 @@ export default function EditProductPage() {
         
       if (error) throw error;
       
-      // 스토리지에서 파일 삭제 (필요한 경우)
-      if (filePath) {
-        await supabase.storage
-          .from('images')
-          .remove([filePath]);
+      // 스토리지에서 파일 삭제
+      if (imageToRemove.url) {
+        await deleteImageFromStorage(imageToRemove.url);
       }
       
       // 상태 업데이트
@@ -513,6 +724,143 @@ export default function EditProductPage() {
   // 이미지 변경 함수
   const handleImageSelect = (imageUrl: string) => {
     setSelectedImage(imageUrl);
+  };
+
+  // 이미지 업로드 함수 추가
+  const uploadImage = async (file: File): Promise<string> => {
+    if (!file) return '';
+    
+    try {
+      // 파일 경로 생성 (임의의 파일명 생성)
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+      const filePath = `products/${productId}/${fileName}`;
+      
+      // 파일 업로드
+      const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+        
+      if (error) throw error;
+      
+      // 이미지 URL 생성 및 반환
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+        
+      return publicUrl;
+    } catch (error) {
+      console.error('이미지 업로드 오류:', error);
+      throw error;
+    }
+  };
+
+  // 대분류 변경 핸들러
+  const handleMainCategoryChange = (mainCategoryId: string) => {
+    setSelectedMainCategory(mainCategoryId);
+    const mainCategory = mainCategories.find(mc => mc.id === mainCategoryId);
+    setAvailableCategories(mainCategory?.categories || []);
+    
+    // 대분류가 변경되면 중분류와 소분류 초기화
+    setSelectedCategory('');
+    setSelectedSubcategory('');
+    setAvailableSubcategories([]);
+  };
+
+  // 중분류 변경 핸들러
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    
+    // 선택된 대분류에서 중분류 찾기
+    const mainCategory = mainCategories.find(mc => mc.id === selectedMainCategory);
+    if (!mainCategory) return;
+    
+    const category = mainCategory.categories.find(c => c.id === categoryId);
+    setAvailableSubcategories(category?.subcategories || []);
+    
+    // 중분류가 변경되면 소분류 초기화
+    setSelectedSubcategory('');
+  };
+
+  // 소분류 변경 핸들러
+  const handleSubcategoryChange = (subcategoryId: string) => {
+    setSelectedSubcategory(subcategoryId);
+  };
+
+  // 제품 정보 로딩 시 카테고리 정보 설정
+  useEffect(() => {
+    if (product) {
+      if (product.main_category) {
+        const mainCategory = mainCategories.find(mc => mc.id === product.main_category);
+        if (mainCategory) {
+          setAvailableCategories(mainCategory.categories);
+          
+          if (product.category) {
+            const category = mainCategory.categories.find(c => c.id === product.category);
+            if (category) {
+              setAvailableSubcategories(category.subcategories);
+            }
+          }
+        }
+      }
+    }
+  }, [product]);
+
+  // 제품 저장 함수 추가
+  const saveProduct = async () => {
+    if (!product) return;
+    
+    setSaving(true);
+    try {
+      let updatedImageUrl = product.product_image_url;
+      
+      // 새 이미지가 선택되었으면 업로드
+      if (imageFile) {
+        updatedImageUrl = await uploadImage(imageFile);
+      }
+      
+      // 제품 정보 업데이트 (카테고리 정보 추가)
+      const { error } = await supabase
+        .from('products')
+        .update({
+          product_image_url: updatedImageUrl,
+          main_category: selectedMainCategory,
+          category: selectedCategory,
+          subcategory: selectedSubcategory
+        })
+        .eq('id', productId);
+        
+      if (error) throw error;
+      
+      // 추가 이미지 처리
+      if (additionalImages.length > 0) {
+        for (const image of additionalImages) {
+          if (image.file) {
+            const imageUrl = await uploadImage(image.file);
+            
+            // 이미지 정보 저장
+            await supabase
+              .from('product_images')
+              .insert({
+                product_id: productId,
+                image_url: imageUrl,
+                is_primary: false,
+                display_order: existingImages.length + additionalImages.indexOf(image) + 1
+              });
+          }
+        }
+      }
+      
+      // 성공 메시지 및 페이지 이동
+      alert('제품이 성공적으로 저장되었습니다.');
+      router.push(`/store/${storeId}/product/${productId}`);
+      
+    } catch (error: any) {
+      console.error('제품 저장 중 오류 발생:', error);
+      alert(`제품 저장 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -645,12 +993,12 @@ export default function EditProductPage() {
                     <div className="absolute inset-0 flex items-center justify-center">
                       <button
                         onClick={handleRemoveImage}
-                        className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                        className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                       >
                         <X className="w-5 h-5" />
                       </button>
-          </div>
-        </div>
+                    </div>
+                  </div>
                 )}
                 
                 {/* 이미지가 없는 경우 업로드 버튼 */}
@@ -675,7 +1023,7 @@ export default function EditProductPage() {
                       onChange={handleImageChange}
                       className="hidden"
                     />
-      </div>
+                  </div>
                 )}
                 
                 {/* 기존 추가 이미지들 */}
@@ -691,7 +1039,7 @@ export default function EditProductPage() {
                     />
                     <button
                       onClick={() => handleRemoveExistingImage(image.id)}
-                      className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                      className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -711,7 +1059,7 @@ export default function EditProductPage() {
                     />
                     <button
                       onClick={() => handleRemoveAdditionalImage(index)}
-                      className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                      className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -756,7 +1104,7 @@ export default function EditProductPage() {
                     />
                     <button
                       onClick={handleRemoveImage}
-                      className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
+                      className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -785,7 +1133,7 @@ export default function EditProductPage() {
                   onChange={handleImageChange}
                   className="hidden"
                 />
-            </div>
+              </div>
             
               {/* 기존 추가 이미지들 - 수직으로 나열 */}
               {existingImages.map(image => (
@@ -793,64 +1141,64 @@ export default function EditProductPage() {
                   key={image.id}
                   className="w-full aspect-square bg-[#f8f8f8] overflow-hidden relative group"
                 >
-                        <img
-                          src={image.url}
+                  <img
+                    src={image.url}
                     alt={`${product.product_name} 추가 이미지`}
                     className="w-full h-full object-contain p-4"
-                        />
-                      <button
-                        onClick={() => handleRemoveExistingImage(image.id)}
-                    className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
-                      >
+                  />
+                  <button
+                    onClick={() => handleRemoveExistingImage(image.id)}
+                    className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
+                  >
                     <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                  </button>
+                </div>
+              ))}
               
               {/* 새 추가 이미지들 - 수직으로 나열 */}
-                  {additionalImages.map((image, index) => (
+              {additionalImages.map((image, index) => (
                 <div 
                   key={`new-${index}`}
                   className="w-full aspect-square bg-[#f8f8f8] overflow-hidden relative group"
                 >
-                        <img
-                          src={image.preview}
+                  <img
+                    src={image.preview}
                     alt={`새 이미지 ${index + 1}`}
                     className="w-full h-full object-contain p-4"
-                        />
-                      <button
-                        onClick={() => handleRemoveAdditionalImage(index)}
-                    className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
-                      >
+                  />
+                  <button
+                    onClick={() => handleRemoveAdditionalImage(index)}
+                    className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
+                  >
                     <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
+                  </button>
+                </div>
+              ))}
             
-            {/* 추가 이미지 업로드 버튼 */}
+              {/* 추가 이미지 업로드 버튼 */}
               <div className="w-full aspect-square bg-[#f8f8f8] overflow-hidden relative">
-              <label
+                <label
                   htmlFor="additional_image_upload_desktop"
                   className="w-full h-full flex flex-col items-center justify-center cursor-pointer"
-              >
+                >
                   <svg className="mx-auto h-16 w-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
                   <p className="mt-4 text-sm text-gray-500">
-                추가 이미지 업로드
+                    추가 이미지 업로드
                   </p>
                   <p className="mt-2 text-xs text-gray-400">
                     최대 10개의 추가 이미지
                   </p>
-              </label>
-              <input
-                type="file"
+                </label>
+                <input
+                  type="file"
                   id="additional_image_upload_desktop"
                   name="additional_image_desktop"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={handleAdditionalImageChange}
-                className="hidden"
-              />
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={handleAdditionalImageChange}
+                  className="hidden"
+                />
               </div>
             </div>
           </div>
@@ -862,7 +1210,7 @@ export default function EditProductPage() {
               <div className="flex-grow mb-auto md:min-h-[150px] lg:min-h-[200px]"></div>
               
               {/* 제품 정보 폼 */}
-          <div>
+              <div>
                 <div className="mb-10">
                   <Link href={`/store/${storeId}`} className="inline-block mb-2">
                     <h2 className="text-sm uppercase tracking-widest text-gray-600 font-medium">
@@ -906,7 +1254,7 @@ export default function EditProductPage() {
                         </button>
                       </>
                     )}
-            </div>
+                  </div>
 
                   {/* 가격 인라인 편집 */}
                   <div className="relative group mb-8">
@@ -1001,6 +1349,105 @@ export default function EditProductPage() {
 
                 {/* 제품 세부 정보 아코디언 */}
                 <div className="mb-10 space-y-5">
+                  {/* 카테고리 설정 추가 */}
+                  <div className="border-t border-gray-200">
+                    <div 
+                      className="flex justify-between items-center py-4 cursor-pointer relative group" 
+                      onClick={() => toggleAccordion('category-options')}
+                    >
+                      <h3 className="text-sm uppercase tracking-widest font-medium">카테고리 설정</h3>
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        className={`h-4 w-4 transition-transform ${activeAccordion === 'category-options' ? 'transform rotate-180' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                    <div 
+                      className={`overflow-hidden transition-all ${activeAccordion === 'category-options' ? 'max-h-96 opacity-100 pt-2 pb-4' : 'max-h-0 opacity-0 py-0'}`}
+                      style={{ transition: 'max-height 0.3s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out' }}
+                    >
+                      <div className="space-y-4">
+                        {/* 대분류 선택 */}
+                        <div>
+                          <label htmlFor="main-category-select" className="block text-sm text-gray-600 mb-1">대분류</label>
+                          <select
+                            id="main-category-select"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            value={selectedMainCategory}
+                            onChange={(e) => handleMainCategoryChange(e.target.value)}
+                          >
+                            <option value="">대분류 선택</option>
+                            {mainCategories.map((mainCategory) => (
+                              <option key={mainCategory.id} value={mainCategory.id}>
+                                {mainCategory.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        {/* 중분류 선택 */}
+                        {selectedMainCategory && (
+                          <div>
+                            <label htmlFor="category-select" className="block text-sm text-gray-600 mb-1">중분류</label>
+                            <select
+                              id="category-select"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                              value={selectedCategory}
+                              onChange={(e) => handleCategoryChange(e.target.value)}
+                              disabled={!selectedMainCategory}
+                            >
+                              <option value="">중분류 선택</option>
+                              {availableCategories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        
+                        {/* 소분류 선택 */}
+                        {selectedCategory && (
+                          <div>
+                            <label htmlFor="subcategory-select" className="block text-sm text-gray-600 mb-1">소분류</label>
+                            <select
+                              id="subcategory-select"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                              value={selectedSubcategory}
+                              onChange={(e) => handleSubcategoryChange(e.target.value)}
+                              disabled={!selectedCategory}
+                            >
+                              <option value="">소분류 선택</option>
+                              {availableSubcategories.map((subcategory) => (
+                                <option key={subcategory.id} value={subcategory.id}>
+                                  {subcategory.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        
+                        {/* 선택된 카테고리 표시 */}
+                        <div className="text-xs text-gray-500 mt-2">
+                          {selectedMainCategory ? (
+                            <div>
+                              선택된 카테고리: 
+                              {mainCategories.find(mc => mc.id === selectedMainCategory)?.name}
+                              {selectedCategory ? ` > ${availableCategories.find(c => c.id === selectedCategory)?.name}` : ''}
+                              {selectedSubcategory ? ` > ${availableSubcategories.find(s => s.id === selectedSubcategory)?.name}` : ''}
+                            </div>
+                          ) : (
+                            '카테고리를 선택해주세요.'
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
                   {/* 재고 설정 */}
                   <div className="border-t border-gray-200">
                     <div 
@@ -1268,21 +1715,30 @@ export default function EditProductPage() {
                   </div>
                 </div>
 
-            {/* 삭제 버튼 */}
+                {/* 삭제 버튼 */}
                 <div className="mt-12 pt-8 border-t border-gray-200">
-              <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center">
                     <Link
                       href={`/store/${storeId}/product/${productId}`}
                       className="text-sm text-gray-500 underline"
                     >
                       상세 페이지로 돌아가기
                     </Link>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                      className="px-8 py-4 text-sm uppercase tracking-widest font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                >
-                  제품 삭제
-                </button>
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={saveProduct}
+                        disabled={saving}
+                        className="px-8 py-4 text-sm uppercase tracking-widest font-medium bg-black text-white hover:bg-gray-800 transition-colors disabled:bg-gray-400"
+                      >
+                        {saving ? '저장 중...' : '수정완료'}
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="px-8 py-4 text-sm uppercase tracking-widest font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+                      >
+                        제품 삭제
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

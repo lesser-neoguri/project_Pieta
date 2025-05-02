@@ -2,17 +2,17 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useError } from '@/contexts/ErrorContext';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const { addError } = useError();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage(null);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -24,16 +24,18 @@ export default function LoginForm() {
         throw error;
       }
 
-      setMessage({
-        text: '로그인 성공!',
+      addError({
+        message: '로그인 성공!',
         type: 'success'
       });
       
       // 로그인 성공 후 리다이렉트 또는 상태 업데이트
       window.location.href = '/';
     } catch (error: any) {
-      setMessage({
-        text: error.message || '로그인 중 오류가 발생했습니다.',
+      console.error('로그인 오류:', error);
+      
+      addError({
+        message: error.message || '로그인 중 오류가 발생했습니다.',
         type: 'error'
       });
     } finally {
@@ -44,12 +46,6 @@ export default function LoginForm() {
   return (
     <div className="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-center">로그인</h2>
-      
-      {message && (
-        <div className={`p-3 mb-4 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {message.text}
-        </div>
-      )}
       
       <form onSubmit={handleLogin}>
         <div className="mb-4">

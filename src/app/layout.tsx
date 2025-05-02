@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProfileProvider } from '@/contexts/ProfileContext';
 import { TransitionProvider } from '@/contexts/TransitionContext';
+import { ErrorProvider } from '@/contexts/ErrorContext';
 import ProfileSidebar from '@/components/ProfileSidebar';
 import Navbar from "@/components/Navbar";
 import PageTransition from "@/components/PageTransition";
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoSansKr.variable} font-pretendard antialiased`}
       >
+        <ErrorProvider>
         <AuthProvider>
           <ProfileProvider>
             <TransitionProvider>
@@ -52,6 +54,7 @@ export default function RootLayout({
             </TransitionProvider>
           </ProfileProvider>
         </AuthProvider>
+        </ErrorProvider>
       </body>
     </html>
   );

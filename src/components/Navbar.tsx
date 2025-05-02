@@ -41,6 +41,86 @@ type WishlistItem = {
   id: string;
 };
 
+// 카테고리 타입 정의 추가
+type Category = {
+  id: string;
+  name: string;
+  link: string;
+  subcategories?: SubCategory[];
+};
+
+type SubCategory = {
+  id: string;
+  name: string;
+  link: string;
+};
+
+// 햄버거 메뉴 애니메이션을 위한 CSS 스타일 추가
+const menuIconStyles = `
+  .hamburger-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: background-color 0.3s;
+  }
+
+  .hamburger-btn.active {
+    background: white;
+  }
+
+  .hamburger-icon {
+    position: relative;
+    width: 22px;
+    height: 22px;
+  }
+
+  .hamburger-icon span {
+    position: absolute;
+    height: 2px;
+    width: 100%;
+    background: currentColor;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    left: 0;
+  }
+
+  .hamburger-icon span:nth-child(1) {
+    top: 4px;
+  }
+
+  .hamburger-icon span:nth-child(2) {
+    top: 10px;
+  }
+
+  .hamburger-icon span:nth-child(3) {
+    top: 16px;
+  }
+
+  .hamburger-btn.active .hamburger-icon span {
+    background: #000;
+  }
+
+  .hamburger-btn.active .hamburger-icon span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .hamburger-btn.active .hamburger-icon span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .hamburger-btn.active .hamburger-icon span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+  }
+`;
+
 const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathname }: { showBanner: boolean; setShowBanner: (show: boolean) => void; pathname: string }) => {
   if (!showBanner || pathname === '/') return null;
   
@@ -84,6 +164,9 @@ export default function Navbar() {
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // 카테고리 토글 상태 추가
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   
   // 스크롤 관련 상태 추가
   const [prevScrollY, setPrevScrollY] = useState(0);
@@ -214,16 +297,42 @@ export default function Navbar() {
   // 투명 배경은 필요하지만 아이콘은 검은색이 필요한 페이지
   const needsTransparentWithDarkIcons = isProductDetailPage;
   
-  // 투자 페이지에서는 로고 텍스트를 변경
-  const isInvestmentPage = pathname.startsWith('/investment');
+  // 카테고리 확장/축소 토글 함수
+  const toggleCategory = (categoryId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // 기본 링크 동작 방지
+    
+    setExpandedCategories(prev => 
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
   
+  // 카테고리 데이터
+  const categories: Category[] = [
+    {
+      id: 'jewelry',
+      name: '주얼리 & 악세서리',
+      link: '/jewelry',
+      subcategories: [
+        { id: 'all_jewelry', name: '주얼리 전체 보기', link: '/jewelry' },
+        { id: 'brands', name: '라인별 주얼리', link: '/jewelry?category=brands' },
+        { id: 'earrings', name: '귀걸이', link: '/jewelry?category=earrings' },
+        { id: 'necklaces', name: '목걸이', link: '/jewelry?category=necklaces' },
+        { id: 'bracelets', name: '팔찌', link: '/jewelry?category=bracelets' },
+        { id: 'rings', name: '반지', link: '/jewelry?category=rings' }
+      ]
+    }
+  ];
+
   if (!mounted) {
     return null;
   }
   
   return (
     <>
-      <Banner showBanner={showBanner} setShowBanner={setShowBanner} pathname={pathname} />
+      <style jsx global>{menuIconStyles}</style>
+      <Banner showBanner={showBanner} setShowBanner={setShowBanner} pathname={pathname || ''} />
       
       <nav 
         className={`fixed top-0 left-0 right-0 z-40 transition-transform duration-300 ${
@@ -232,21 +341,10 @@ export default function Navbar() {
       >
         <div className="max-w-8xl mx-auto px-1 sm:px-6 lg:px-10">
           <div className="flex justify-between h-16 sm:h-20 md:h-24 py-2 sm:py-3 md:py-4">
-            {/* 왼쪽 유틸리티 아이콘 */}
+            {/* 왼쪽 유틸리티 아이콘 - 햄버거 메뉴는 제거하고 고정 포지션으로 이동 */}
             <div className="w-1/3 flex items-center justify-start space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5">
-              {/* 햄버거 메뉴 아이콘 */}
-              <button 
-                onClick={() => setShowSideMenu(!showSideMenu)}
-                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
-                aria-label="메뉴"
-                title="메뉴"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 md:h-5 md:w-5 lg:h-6 lg:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16m-7 6h7" />
-                </svg>
-              </button>
-              
-              {/* 검색 아이콘 */}
+              {/* 검색 아이콘만 남김 */}
+              <div className="w-10 sm:w-12 md:w-14"></div> {/* 햄버거 메뉴 위치 유지를 위한 빈 공간 */}
               <button 
                 onClick={() => setShowSearchBar(!showSearchBar)}
                 className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
@@ -262,13 +360,7 @@ export default function Navbar() {
             {/* 로고 (중앙 정렬) */}
             <div className="flex items-center justify-center w-1/3">
               <Link href="/" className={`font-bold ${needsTransparentBg ? 'text-white' : needsTransparentWithDarkIcons ? 'text-gray-800' : 'text-gray-800'} -mt`}>
-                {isInvestmentPage ? (
-                  <div className="text-4xl font-light tracking-[0.2em] uppercase flex items-baseline">
-                    PIETA <span className="text-yellow-600 text-2xl ml-2 font-light">GOLD</span>
-                  </div>
-                ) : (
                   <div className="text-4xl font-light tracking-[0.2em] uppercase">PIETA</div>
-                )}
               </Link>
             </div>
             
@@ -361,9 +453,9 @@ export default function Navbar() {
         </div>
       </nav>
       
-      {/* 사이드 메뉴 (햄버거 메뉴 클릭 시 표시) - 네비게이션 바 외부로 이동 */}
+      {/* 사이드 메뉴 (햄버거 메뉴 클릭 시 표시) - 사이드 메뉴의 z-index 증가 */}
       {showSideMenu && (
-        <div className="fixed inset-0 z-50 flex">
+        <div className="fixed inset-0 z-[1000] flex">
           {/* 배경 오버레이 (클릭 시 메뉴 닫힘) */}
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" 
@@ -371,30 +463,59 @@ export default function Navbar() {
           ></div>
           
           {/* 사이드 메뉴 패널 */}
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-xl">
+          <div className="relative flex-1 flex flex-col max-w-xs w-full pt-16 bg-white shadow-xl">
             <div className="flex items-center justify-between px-4 pt-5 pb-4">
               <div className="text-2xl font-light tracking-[0.2em] uppercase">PIETA</div>
-              <button 
-                onClick={() => setShowSideMenu(false)}
-                className="p-2 rounded-full hover:bg-gray-100 text-gray-600"
-                aria-label="닫기"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
             
             <div className="flex-1 py-4 overflow-y-auto">
               <nav className="px-2 space-y-1">
                 <Link href="/" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>홈</Link>
                 <Link href="/products" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>전체보기</Link>
-                <Link href="/investment" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>투자 & 골드바</Link>
-                <Link href="/jewelry" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>주얼리 & 악세서리</Link>
+                
+                {/* 주얼리 카테고리 - 클릭 시 하위 카테고리 토글 */}
+                <div className="relative">
+                  <a 
+                    href="#" 
+                    className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700 flex justify-between items-center"
+                    onClick={(e) => toggleCategory('jewelry', e)}
+                  >
+                    주얼리 & 악세서리
+                    <svg 
+                      className={`w-4 h-4 transition-transform ${expandedCategories.includes('jewelry') ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24" 
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </a>
+                  
+                  {/* 하위 카테고리 */}
+                  <div 
+                    className={`pl-6 space-y-1 overflow-hidden transition-all ${
+                      expandedCategories.includes('jewelry') 
+                        ? 'max-h-96 opacity-100 py-2' 
+                        : 'max-h-0 opacity-0 py-0'
+                    }`}
+                  >
+                    {categories.find(c => c.id === 'jewelry')?.subcategories?.map(subcat => (
+                      <Link 
+                        key={subcat.id}
+                        href={subcat.link}
+                        className="block px-3 py-2 text-sm rounded-md hover:bg-gray-100 text-gray-600"
+                        onClick={() => setShowSideMenu(false)}
+                      >
+                        {subcat.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+                
                 <Link href="/storelist" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>상점 목록</Link>
                 
-                {/* 로그인한 사용자에게만 표시되는 메뉴 */}
-                {user && (
+                {user ? (
                   <>
                     <div className="border-t border-gray-200 my-3"></div>
                     <Link href="/wishlist" className="flex items-center px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>
@@ -410,12 +531,28 @@ export default function Navbar() {
                       장바구니
                     </Link>
                   </>
+                ) : (
+                  <Link href="/login" className="block px-3 py-2 rounded-md hover:bg-gray-100 text-gray-700" onClick={() => setShowSideMenu(false)}>로그인</Link>
                 )}
               </nav>
             </div>
           </div>
         </div>
       )}
+      
+      {/* 고정된 햄버거 메뉴 버튼 - DOM에서 가장 마지막에 배치하여 항상 최상위에 표시 */}
+      <button 
+        onClick={() => setShowSideMenu(!showSideMenu)}
+        className={`hamburger-btn ${showSideMenu ? 'active' : ''} ${needsTransparentBg && !showSideMenu ? 'text-white' : 'text-gray-600'}`}
+        aria-label={showSideMenu ? "메뉴 닫기" : "메뉴"}
+        title={showSideMenu ? "메뉴 닫기" : "메뉴"}
+      >
+        <div className="hamburger-icon">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </button>
     </>
   );
 } 

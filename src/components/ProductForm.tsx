@@ -4,6 +4,8 @@ import { useState, useEffect, ChangeEvent, FormEvent, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
+import { useError } from '@/contexts/ErrorContext';
+import { deleteImageFromStorage } from '@/lib/supabase';
 
 type ProductFormProps = {
   storeId: string;
@@ -36,7 +38,7 @@ export default function ProductForm({
 }: ProductFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const { addError } = useError();
   const [formData, setFormData] = useState({
     product_name: initialData?.product_name || '',
     product_description: initialData?.product_description || '',
@@ -130,22 +132,15 @@ export default function ProductForm({
     if (!oldImageUrl) return;
     
     try {
-      const filePath = extractFilePathFromUrl(oldImageUrl);
-      if (!filePath) {
-        console.warn('이전 이미지 경로를 추출할 수 없습니다:', oldImageUrl);
-        return;
-      }
+      console.log('이전 이미지 삭제 시도:', oldImageUrl);
       
-      console.log('이전 이미지 삭제 시도:', filePath);
+      // 스토리지에서 이미지 파일 삭제
+      const success = await deleteImageFromStorage(oldImageUrl);
       
-      const { error } = await supabase.storage
-        .from('images')
-        .remove([filePath]);
-        
-      if (error) {
-        console.error('이전 이미지 삭제 오류:', error);
+      if (success) {
+        console.log('이전 이미지 삭제 성공:', oldImageUrl);
       } else {
-        console.log('이전 이미지 삭제 성공:', filePath);
+        console.error('이전 이미지 삭제 실패:', oldImageUrl);
       }
     } catch (error) {
       console.error('이미지 삭제 중 오류 발생:', error);
@@ -155,11 +150,13 @@ export default function ProductForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage(null);
     
     try {
       let product_image_url = initialData?.product_image_url || null;
       let oldImageUrl = null;
+      
+      // 제품 수정 시 productId 사용, 신규 등록 시 임시 UUID 생성
+      const imageProductId = productId || uuidv4();
       
       // 이미지 파일이 있으면 스토리지에 업로드
       if (imageFile) {
@@ -179,7 +176,7 @@ export default function ProductForm({
           
           // 파일명 생성 (경로에 특수문자 제거)
           const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
-          const filePath = `${fileName}`;
+          const filePath = `products/${imageProductId}/${fileName}`;
           
           console.log('업로드 경로:', filePath);
           
@@ -216,16 +213,23 @@ export default function ProductForm({
           // 이미지 업로드 실패 시 사용자에게 알림
           const errorMessage = imageError.message || '이미지 업로드에 실패했습니다.';
           
-          // 이미지 없이 계속 진행할지 확인
-          const continueWithoutImage = confirm(`${errorMessage}\n\n이미지 없이 제품을 등록하시겠습니까?`);
-          if (!continueWithoutImage) {
-            setLoading(false);
-            return;
-          }
-          
+          // 에러 컨텍스트를 통한 메시지 표시
+          addError({
+            message: errorMessage,
+            type: 'warning',
+            actionText: '이미지 없이 계속',
+            onAction: () => {
           // 이미지 없이 계속 진행
           product_image_url = initialData?.product_image_url || null;
           oldImageUrl = null; // 이미지 업로드 실패 시 이전 이미지 유지
+              
+              // 다시 제품 저장 시도
+              saveProduct(product_image_url, oldImageUrl);
+            }
+          });
+          
+          setLoading(false);
+          return;
         }
       } else if (initialData?.product_image_url !== undefined && initialData?.product_image_url === null) {
         // 이미지가 명시적으로 제거된 경우
@@ -235,6 +239,24 @@ export default function ProductForm({
         }
       }
       
+      // 제품 저장 로직 호출
+      await saveProduct(product_image_url, oldImageUrl);
+      
+    } catch (error: any) {
+      console.error('제품 등록 중 오류 발생:', error);
+      
+      // 에러 컨텍스트를 통한 오류 표시
+      addError({
+        message: error.message || '제품 등록에 실패했습니다.',
+        type: 'error'
+      });
+      
+      setLoading(false);
+    }
+  };
+  
+  // 제품 저장 로직을 별도 함수로 분리
+  const saveProduct = async (product_image_url: string | null, oldImageUrl: string | null) => {
       // 제품 데이터 준비
       const productData = {
         store_id: storeId,
@@ -286,7 +308,7 @@ export default function ProductForm({
               }
               
               // 파일명 생성
-              const fileName = `products/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
+              const fileName = `products/${productId}/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
               
               // 이미지 업로드
               const { data: uploadData, error: uploadError } = await supabase.storage
@@ -327,8 +349,9 @@ export default function ProductForm({
           }
         }
         
-        setMessage({
-          text: '제품이 성공적으로 수정되었습니다.',
+      // 성공 메시지 표시
+      addError({
+        message: '제품이 성공적으로 수정되었습니다.',
           type: 'success'
         });
 
@@ -369,7 +392,7 @@ export default function ProductForm({
               }
               
               // 파일명 생성
-              const fileName = `products/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
+              const fileName = `products/${newProduct.id}/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
               
               // 이미지 업로드
               const { data: uploadData, error: uploadError } = await supabase.storage
@@ -415,33 +438,22 @@ export default function ProductForm({
           onProductCreated();
         }
         
-        setMessage({
-          text: '제품이 성공적으로 등록되었습니다.',
+      // 성공 메시지 표시
+      addError({
+        message: '제품이 성공적으로 등록되었습니다.',
           type: 'success'
         });
         
         if (stayOnPage) {
           // 폼 초기화하고 현재 페이지에 머무름
           resetForm();
-          // 3초 후 성공 메시지 제거
-          setTimeout(() => {
-            setMessage(null);
-          }, 3000);
+        setLoading(false);
         } else {
           // 상점 상세 페이지로 이동
           setTimeout(() => {
             router.push(`/store/${storeId}`);
           }, 2000);
         }
-      }
-    } catch (error: any) {
-      console.error('제품 저장 중 오류 발생:', error);
-      setMessage({
-        text: `제품 저장 중 오류가 발생했습니다: ${error.message || JSON.stringify(error)}`,
-        type: 'error'
-      });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -629,12 +641,6 @@ export default function ProductForm({
         }
         `}
       </style>
-      
-      {message && (
-        <div className={`mb-8 text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-          {message.text}
-        </div>
-      )}
       
       <div className="space-y-6">
         <div>

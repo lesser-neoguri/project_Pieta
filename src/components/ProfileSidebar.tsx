@@ -62,14 +62,28 @@ export default function ProfileSidebar() {
         setLoadingProfile(true);
         setError(null);
 
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         const { data: userData, error: userError } = await supabase
           .from('users')
           .select('*')
           .eq('id', user.id)
           .single();
 
-        if (userError) throw userError;
-        if (!userData) throw new Error('사용자 정보를 찾을 수 없습니다.');
+        if (userError) {
+          console.warn('사용자 정보 조회 중 경고:', userError);
+          if (userError.code === 'PGRST116') {
+            setLoadingProfile(false);
+            return;
+          }
+          throw userError;
+        }
+        
+        if (!userData) {
+          console.warn('사용자 정보가 아직 준비되지 않았습니다.');
+          setLoadingProfile(false);
+          return;
+        }
 
         setUserData(userData as UserData);
         
@@ -80,8 +94,14 @@ export default function ProfileSidebar() {
             .eq('user_id', user.id)
             .single();
             
-          if (regularError) throw regularError;
-          setRegularUserData(regularData as RegularUserData);
+          if (regularError) {
+            console.warn('일반 사용자 정보 조회 중 경고:', regularError);
+            if (regularError.code !== 'PGRST116') {
+              throw regularError;
+            }
+          } else if (regularData) {
+            setRegularUserData(regularData as RegularUserData);
+          }
         } else if (userData.user_type === 'vendor') {
           const { data: vendorData, error: vendorError } = await supabase
             .from('vendor_users')
@@ -89,18 +109,28 @@ export default function ProfileSidebar() {
             .eq('user_id', user.id)
             .single();
             
-          if (vendorError) throw vendorError;
-          setVendorUserData(vendorData as VendorUserData);
+          if (vendorError) {
+            console.warn('판매자 정보 조회 중 경고:', vendorError);
+            if (vendorError.code !== 'PGRST116') {
+              throw vendorError;
+            }
+          } else if (vendorData) {
+            setVendorUserData(vendorData as VendorUserData);
+          }
         }
       } catch (error: any) {
         console.error('사용자 정보 조회 오류:', error);
-        setError(error.message || '사용자 정보를 불러오는데 실패했습니다.');
+        if (error.message) {
+          setError(error.message);
+        } else {
+          setError('사용자 정보를 불러오는데 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
       } finally {
         setLoadingProfile(false);
       }
     };
 
-    if (isProfileOpen) {
+    if (isProfileOpen && user) {
       fetchUserData();
     }
   }, [user, isProfileOpen]);

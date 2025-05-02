@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, deleteProductWithImages, deleteImageFromStorage } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -91,10 +91,10 @@ type ProductReview = {
 
 export default function ProductDetailPage() {
   const { user } = useAuth();
-  const params = useParams();
   const router = useRouter();
-  const storeId = params.id as string;
-  const productId = params.productId as string;
+  const params = useParams();
+  const storeId = params?.id as string;
+  const productId = params?.productId as string;
   
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -487,20 +487,8 @@ export default function ProductDetailPage() {
     if (!imageUrl) return;
     
     try {
-      const filePath = extractFilePathFromUrl(imageUrl);
-      if (!filePath) return;
-      
-      console.log('제품 이미지 삭제 시도:', filePath);
-      
-      const { error } = await supabase.storage
-        .from('images')
-        .remove([filePath]);
-        
-      if (error) {
-        console.error('이미지 삭제 오류:', error);
-      } else {
-        console.log('이미지 삭제 성공');
-      }
+      // 스토리지에서 이미지 파일 삭제
+      await deleteImageFromStorage(imageUrl);
     } catch (error) {
       console.error('이미지 삭제 중 오류 발생:', error);
     }
@@ -513,26 +501,21 @@ export default function ProductDetailPage() {
     setDeleteLoading(true);
     
     try {
-      // 제품 삭제
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', productId)
-        .eq('store_id', storeId);
+      // 새로운 함수를 사용하여 제품과 관련 이미지를 함께 삭제
+      const { success, error } = await deleteProductWithImages(product.id);
         
-      if (error) throw error;
-      
-      // 제품 이미지 삭제
-      if (product.product_image_url) {
-        await deleteProductImage(product.product_image_url);
+      if (!success) {
+        throw error;
       }
       
-      // 삭제 성공 후 상점 페이지로 이동
-      alert('제품이 성공적으로 삭제되었습니다.');
-      router.push(`/store/${storeId}`);
-    } catch (error: any) {
-      console.error('제품 삭제 중 오류 발생:', error);
-      alert(`제품 삭제 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
+      // 성공 메시지 표시
+      alert('제품이 삭제되었습니다.');
+      
+      router.push(`/store/${product.store_id}`);
+    } catch (error) {
+      console.error('제품 삭제 중 오류:', error);
+      // 오류 메시지 표시
+      alert('제품 삭제 중 오류가 발생했습니다.');
     } finally {
       setDeleteLoading(false);
       setShowDeleteConfirm(false);
@@ -659,7 +642,7 @@ export default function ProductDetailPage() {
           }
           
           // 파일명 생성
-          const fileName = `reviews/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
+          const fileName = `products/${productId}/reviews/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
           
           // 이미지 업로드
           const { data: uploadData, error: uploadError } = await supabase.storage
@@ -762,7 +745,7 @@ export default function ProductDetailPage() {
       
       // 리뷰 이미지 삭제
       if (userReview.review_image_url) {
-        await deleteProductImage(userReview.review_image_url);
+        await deleteImageFromStorage(userReview.review_image_url);
       }
       
       alert('리뷰가 성공적으로 삭제되었습니다.');
