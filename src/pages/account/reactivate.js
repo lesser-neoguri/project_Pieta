@@ -21,10 +21,18 @@ import {
   Divider,
 } from '@chakra-ui/react';
 
-// Supabase 클라이언트 초기화
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Supabase 클라이언트 초기화 - 클라이언트 사이드에서만 실행되도록 수정
+let supabase = null;
+
+// 클라이언트 사이드에서만 초기화
+if (typeof window !== 'undefined') {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (supabaseUrl && supabaseAnonKey) {
+    supabase = createClient(supabaseUrl, supabaseAnonKey);
+  }
+}
 
 export default function AccountReactivate() {
   const [email, setEmail] = useState('');
