@@ -8,9 +8,20 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        pretendard: ['var(--font-pretendard)'],
-        serif: ['var(--font-geist-sans)'],
-        mono: ['var(--font-geist-mono)'],
+        // 기본 sans 폰트 설정 (영문+한글 혼합)
+        sans: [
+          'var(--font-geist-sans)', 
+          'var(--font-noto-sans-kr)', 
+          'ui-sans-serif', 
+          'system-ui', 
+          'sans-serif'
+        ],
+        // 한글 중심 폰트
+        korean: ['var(--font-noto-sans-kr)', 'sans-serif'],
+        // 영문 전용 폰트
+        geist: ['var(--font-geist-sans)', 'sans-serif'],
+        // 고정폭 폰트
+        mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
       },
       typography: {
         DEFAULT: {

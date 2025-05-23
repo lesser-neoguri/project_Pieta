@@ -9,21 +9,8 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
 import { FaSearch, FaTimes, FaBars, FaUser, FaShoppingCart } from 'react-icons/fa';
-
-// 스로틀 함수 추가
-function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let lastCall = 0;
-  return (...args: Parameters<T>) => {
-    const now = Date.now();
-    if (now - lastCall >= delay) {
-      lastCall = now;
-      func(...args);
-    }
-  };
-}
+import logger from '@/lib/logger';
+import { useScroll } from '@/hooks/useScroll';
 
 // 필요한 타입 정의
 type SearchResult = {
@@ -85,51 +72,40 @@ export default function Navbar() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // 스크롤 관련 상태 추가
-  const [prevScrollY, setPrevScrollY] = useState(0);
-  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null);
+  // 네비게이션 바 표시 여부 상태
   const [isNavVisible, setIsNavVisible] = useState(true);
   
   // 특정 페이지에서 아이콘 색상 결정
   const isProductDetailPage = pathname?.includes('/store/') && pathname?.includes('/product/');
   const iconColor = isProductDetailPage ? 'text-black' : 'text-white';
 
+  // useScroll 훅 사용
+  const { direction, scrollY } = useScroll({
+    detectDirection: true,
+    throttleDelay: 50,
+    onDirectionChange: (newDirection) => {
+      // /products 페이지에서는 항상 네비게이션 바 표시
+      if (pathname === '/products') {
+        setIsNavVisible(true);
+        return;
+      }
+      
+      // 다른 페이지에서는 스크롤 방향에 따라 표시/숨김
+      if (newDirection === 'down') {
+        setIsNavVisible(false);
+      } else if (newDirection === 'up') {
+        setIsNavVisible(true);
+      }
+    }
+  });
+
   useLayoutEffect(() => {
     setMounted(true);
   }, []);
 
-  // 스크롤 방향 감지 함수 수정
-  const handleScroll = useCallback(
-    throttle(() => {
-      const currentScrollY = window.scrollY;
-      
-      // /products 페이지에서는 항상 네비게이션 바 표시
-      if (pathname === '/products') {
-        setIsNavVisible(true);
-        setPrevScrollY(currentScrollY);
-        return;
-      }
-      
-      // 다른 페이지에서는 기존 로직 적용
-      if (currentScrollY > prevScrollY) {
-        // 아래로 스크롤 - 즉시 숨김
-        setIsNavVisible(false);
-      } else if (currentScrollY < prevScrollY) {
-        // 위로 스크롤 - 보이게 함
-        setIsNavVisible(true);
-      }
-      
-      setPrevScrollY(currentScrollY);
-    }, 50),
-    [prevScrollY, pathname]
-  );
-  
-  // 스크롤 이벤트 리스너 등록
+  // 커스텀 이벤트 리스너 등록 - 제품 상세 페이지의 이미지 스크롤에 반응
   useEffect(() => {
     if (mounted) {
-      window.addEventListener('scroll', handleScroll);
-      
-      // 커스텀 이벤트 리스너 추가 - 제품 상세 페이지의 이미지 스크롤에 반응
       const handleNavbarControl = (event: CustomEvent) => {
         const { hide } = event.detail;
         if (hide) {
@@ -142,11 +118,10 @@ export default function Navbar() {
       window.addEventListener('navbarControl', handleNavbarControl as EventListener);
       
       return () => {
-        window.removeEventListener('scroll', handleScroll);
         window.removeEventListener('navbarControl', handleNavbarControl as EventListener);
       };
     }
-  }, [mounted, handleScroll]);
+  }, [mounted]);
 
   useEffect(() => {
     if (mounted) {
@@ -179,7 +154,7 @@ export default function Navbar() {
           
           setCartItemCount(count || 0);
         } catch (error) {
-          console.error('장바구니 아이템 수 가져오기 오류:', error);
+          logger.error('장바구니 아이템 수 가져오기 오류:', error);
           setCartItemCount(0);
         }
       };
@@ -200,7 +175,7 @@ export default function Navbar() {
         .subscribe();
         
       return () => {
-        cartSubscription.unsubscribe();
+        supabase.removeChannel(cartSubscription);
       };
     }
   }, [user, mounted]);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ProductListPage, { CategoryItem } from '@/components/ProductListPage';
 
 const jewelryCategories: CategoryItem[] = [
@@ -12,7 +13,23 @@ const jewelryCategories: CategoryItem[] = [
   { id: 'sets', name: '세트' }
 ];
 
+// URL 파라미터를 기반으로 필터 문자열 생성하는 함수
+function getFilterString(category?: string): string {
+  // 기본적으로 category 필드를 jewelry로 필터링
+  let filter = "category.eq.jewelry";
+  
+  // 추가적인 하위 카테고리 필터링 (category 파라미터가 있는 경우)
+  if (category && category !== 'all') {
+    filter = `${filter},subcategory.eq.${category}`;
+  }
+  
+  // 이름 기반 필터링 백업 - category 필드가 없는 경우를 위한 대비책
+  return `${filter},product_name.ilike.%주얼리%,product_name.ilike.%목걸이%,product_name.ilike.%반지%,product_name.ilike.%귀걸이%,product_name.ilike.%팔찌%`;
+}
+
 export default function JewelryPage() {
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get('category') || 'all';
   const [selectedMaterial, setSelectedMaterial] = useState<string>('all');
 
   // 소재 옵션
@@ -42,6 +59,9 @@ export default function JewelryPage() {
     </div>
   );
 
+  // 현재 URL 파라미터에 기반한 필터 문자열 생성
+  const productFilter = getFilterString(categoryParam);
+
   return (
     <ProductListPage
       title="JEWELRY & ACCESSORIES"
@@ -49,7 +69,7 @@ export default function JewelryPage() {
       backgroundImage="https://images.unsplash.com/photo-1515405295579-ba7b45403062?q=80&w=2070&auto=format&fit=crop"
       categories={jewelryCategories}
       filters={materialFilter}
-      productFilter="category.eq.jewelry,product_name.ilike.%주얼리%,product_name.ilike.%목걸이%,product_name.ilike.%반지%,product_name.ilike.%귀걸이%,product_name.ilike.%팔찌%"
+      productFilter={productFilter}
       categoryType="standard"
     />
   );

@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { extractPathFromUrl } from '@/lib/migration';
+import toast from 'react-hot-toast';
+import logger from '@/lib/logger';
 
 type StoreData = {
   id: string;
@@ -82,18 +85,22 @@ export default function StorePage() {
 
         if (productsError) throw productsError;
 
-        // 디버깅을 위한 로그 추가
-        console.log('가져온 제품 목록:', productsData);
-        if (productsData && productsData.length > 0) {
-          console.log('첫 번째 제품의 total_sales:', productsData[0].total_sales);
-          console.log('첫 번째 제품의 average_rating:', productsData[0].average_rating);
+        if (productsData) {
+          setProducts(productsData);
+          
+          // 디버깅용 로그를 logger로 대체
+          logger.debug('가져온 제품 목록:', productsData);
+          
+          if (productsData.length > 0) {
+            logger.debug('첫 번째 제품의 total_sales:', productsData[0].total_sales);
+            logger.debug('첫 번째 제품의 average_rating:', productsData[0].average_rating);
+          }
+          
+          logger.debug(`${productsData?.length || 0}개의 제품을 불러왔습니다.`);
         }
-
-        setProducts(productsData || []);
-        console.log(`${productsData?.length || 0}개의 제품을 불러왔습니다.`);
       } catch (error: any) {
-        console.error('데이터 로딩 중 오류 발생:', error);
-        setError('상점 정보를 불러오는 중 오류가 발생했습니다.');
+        logger.error('데이터 로딩 중 오류 발생:', error);
+        setError('데이터를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
       }
@@ -104,41 +111,34 @@ export default function StorePage() {
     }
   }, [storeId, user]);
 
-  // 이미지 URL에서 파일 경로 추출하는 함수
-  const extractFilePathFromUrl = (url: string | null): string | null => {
-    if (!url) return null;
-    
-    try {
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      return pathParts[pathParts.length - 1];
-    } catch (error) {
-      console.error('URL 파싱 오류:', error);
-      return null;
-    }
-  };
-
   // 제품 이미지 삭제 함수
-  const deleteProductImage = async (imageUrl: string | null): Promise<void> => {
+  const handleRemoveImage = async (imageUrl: string) => {
     if (!imageUrl) return;
     
+    const filePath = extractPathFromUrl(imageUrl);
+    if (!filePath) {
+      alert('이미지 경로를 찾을 수 없습니다.');
+      return;
+    }
+    
+    logger.debug('제품 이미지 삭제 시도:', filePath);
+    
     try {
-      const filePath = extractFilePathFromUrl(imageUrl);
-      if (!filePath) return;
-      
-      console.log('제품 이미지 삭제 시도:', filePath);
-      
       const { error } = await supabase.storage
         .from('images')
         .remove([filePath]);
-        
+      
       if (error) {
-        console.error('이미지 삭제 오류:', error);
-      } else {
-        console.log('이미지 삭제 성공');
+        logger.error('이미지 삭제 오류:', error);
+        alert('이미지 삭제 중 오류가 발생했습니다.');
+        return;
       }
-    } catch (error) {
-      console.error('이미지 삭제 중 오류 발생:', error);
+      
+      logger.debug('이미지 삭제 성공');
+      
+    } catch (error: any) {
+      logger.error('이미지 삭제 중 오류 발생:', error);
+      alert('이미지 삭제 중 오류가 발생했습니다.');
     }
   };
 
@@ -166,7 +166,7 @@ export default function StorePage() {
       
       // 제품 이미지 삭제
       if (productToDelete.product_image_url) {
-        await deleteProductImage(productToDelete.product_image_url);
+        await handleRemoveImage(productToDelete.product_image_url);
       }
       
       // 제품 목록 업데이트
@@ -180,6 +180,48 @@ export default function StorePage() {
     } finally {
       setDeleteLoading(false);
       setDeleteProductId(null);
+    }
+  };
+
+  // 스토어 로고 삭제 함수
+  const handleDeleteLogo = async () => {
+    if (!store || !store.store_logo_url) return;
+    
+    try {
+      const filePath = extractPathFromUrl(store.store_logo_url);
+      if (!filePath) {
+        toast.error('이미지 경로를 추출할 수 없습니다.');
+        return;
+      }
+      
+      const { error } = await supabase.storage
+        .from('images')
+        .remove([filePath]);
+        
+      if (error) {
+        toast.error('로고 삭제 중 오류가 발생했습니다.');
+        logger.error('로고 삭제 오류:', error);
+        return;
+      }
+      
+      // DB에서 logo_url 제거
+      const { error: updateError } = await supabase
+        .from('stores')
+        .update({ store_logo_url: null })
+        .eq('id', store.id);
+        
+      if (updateError) {
+        toast.error('스토어 업데이트 중 오류가 발생했습니다.');
+        logger.error('스토어 업데이트 오류:', updateError);
+        return;
+      }
+      
+      // 성공 메시지 표시 및 페이지 새로고침
+      toast.success('로고가 삭제되었습니다.');
+      window.location.reload();
+    } catch (error) {
+      toast.error('오류가 발생했습니다.');
+      logger.error('로고 삭제 처리 중 오류:', error);
     }
   };
 

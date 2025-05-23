@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import logger from '@/lib/logger';
 
 type BusinessHours = {
   monday: { open: string; close: string; isOpen: boolean };
@@ -140,7 +141,7 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
           setStoreAddress(vendorData.address || '');
         }
       } catch (error: any) {
-        console.error('데이터 로딩 중 오류 발생:', error);
+        logger.error('데이터 로딩 중 오류 발생:', error);
         setMessage({
           text: '데이터를 불러오는 중 오류가 발생했습니다.',
           type: 'error'
@@ -208,7 +209,7 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
         router.push('/vendor/store');
       }, 2000);
     } catch (error: any) {
-      console.error('상점 저장 중 오류 발생:', error);
+      logger.error('상점 저장 중 오류 발생:', error);
       setMessage({
         text: error.message || '상점 정보 저장 중 오류가 발생했습니다.',
         type: 'error'
@@ -253,19 +254,19 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center font-pretendard">
+      <h2 className="text-2xl font-bold mb-6 text-center font-korean">
         {existingStore ? '상점 정보 수정' : '상점 개설'}
       </h2>
       
       {message && (
-        <div className={`p-4 mb-6 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} font-pretendard`}>
+        <div className={`p-4 mb-6 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} font-korean`}>
           {message.text}
         </div>
       )}
       
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1 font-pretendard">
+          <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1 font-korean">
             상점명 <span className="text-red-500">*</span>
           </label>
           <input
@@ -274,13 +275,13 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
             value={storeName}
             onChange={(e) => setStoreName(e.target.value)}
             required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-pretendard"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-korean"
             placeholder="상점명을 입력하세요"
           />
         </div>
         
         <div>
-          <label htmlFor="storeDescription" className="block text-sm font-medium text-gray-700 mb-1 font-pretendard">
+          <label htmlFor="storeDescription" className="block text-sm font-medium text-gray-700 mb-1 font-korean">
             상점 설명
           </label>
           <textarea
@@ -288,7 +289,7 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
             value={storeDescription}
             onChange={(e) => setStoreDescription(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-pretendard"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-korean"
             placeholder="상점에 대한 설명을 입력하세요"
           />
         </div>

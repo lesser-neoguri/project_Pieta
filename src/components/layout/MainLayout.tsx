@@ -3,8 +3,6 @@ import { ReactNode } from 'react';
 
 interface MainLayoutProps {
   children: ReactNode;
-  showNav?: boolean;
-  showLogo?: boolean;
   centered?: boolean;
 }
 

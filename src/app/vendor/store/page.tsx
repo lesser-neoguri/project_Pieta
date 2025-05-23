@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import logger from '@/lib/logger';
 
 type StoreData = {
   id: string;
@@ -89,7 +90,7 @@ export default function StoreManagementPage() {
 
         setStores(storesData || []);
       } catch (error: any) {
-        console.error('데이터 로딩 중 오류 발생:', error);
+        logger.error('데이터 로딩 중 오류 발생:', error);
         setMessage({
           text: '데이터를 불러오는 중 오류가 발생했습니다.',
           type: 'error'
@@ -142,7 +143,7 @@ export default function StoreManagementPage() {
       // 3초 후 메시지 제거
       setTimeout(() => setMessage(null), 3000);
     } catch (error: any) {
-      console.error('상점 상태 변경 중 오류 발생:', error);
+      logger.error('상점 상태 변경 중 오류 발생:', error);
       setMessage({
         text: '상점 상태 변경 중 오류가 발생했습니다.',
         type: 'error'

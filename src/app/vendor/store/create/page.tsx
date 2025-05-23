@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import StoreForm from '@/components/StoreForm';
+import logger from '@/lib/logger';
 
 export default function CreateStorePage() {
   const { user } = useAuth();
@@ -96,7 +97,7 @@ export default function CreateStorePage() {
         }
 
       } catch (error: any) {
-        console.error('사용자 상태 확인 중 오류 발생:', error);
+        logger.error('사용자 상태 확인 중 오류 발생:', error);
         setMessage({
           text: '사용자 정보를 확인하는 중 오류가 발생했습니다.',
           type: 'error'

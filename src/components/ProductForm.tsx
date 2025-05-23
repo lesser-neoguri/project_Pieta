@@ -4,6 +4,13 @@ import { useState, useEffect, ChangeEvent, FormEvent, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { v4 as uuidv4 } from 'uuid';
+import { extractPathFromUrl, moveImage } from '@/lib/migration';
+import { useEditor, EditorContent, Editor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import Heading from '@tiptap/extension-heading';
+import Placeholder from '@tiptap/extension-placeholder';
+import logger from '@/lib/logger';
 
 type ProductFormProps = {
   storeId: string;
@@ -46,33 +53,34 @@ export default function ProductForm({
     category: initialData?.category || '',
   });
   const [stayOnPage, setStayOnPage] = useState(continueAdding);
-  const [textSelection, setTextSelection] = useState<{
-    start: number;
-    end: number;
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const textareaRef = useRef<HTMLDivElement>(null);
+  
+  // Tiptap 에디터 설정
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      Heading.configure({
+        levels: [2, 3, 4],
+      }),
+      Placeholder.configure({
+        placeholder: '제품 설명을 입력하세요...',
+      }),
+    ],
+    content: initialData?.product_description || '',
+    onUpdate: ({ editor }) => {
+      setFormData({
+        ...formData,
+        product_description: editor.getHTML()
+      });
+    },
+  });
 
   useEffect(() => {
-    if (textareaRef.current) {
-      // 초기 내용 설정
-      if (initialData?.product_description) {
-        textareaRef.current.innerHTML = initialData.product_description;
-      }
-      
-      // 포커스 설정 함수
-      const setInitialFocus = () => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-        }
-      };
-      
-      // 컴포넌트 마운트 후 약간의 지연 시간을 두고 포커스 설정
-      setTimeout(setInitialFocus, 100);
+    // 초기 데이터가 변경되면 에디터 내용 업데이트
+    if (initialData?.product_description && editor) {
+      editor.commands.setContent(initialData.product_description);
     }
-  }, [initialData?.product_description]);
+  }, [initialData?.product_description, editor]);
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -105,50 +113,94 @@ export default function ProductForm({
       is_available: true,
       category: '',
     });
-  };
-
-  // 이전 이미지 URL에서 파일 경로 추출하는 함수
-  const extractFilePathFromUrl = (url: string | null): string | null => {
-    if (!url) return null;
     
-    try {
-      // URL에서 파일 경로 추출
-      // 예: https://xxx.supabase.co/storage/v1/object/public/images/filename.jpg
-      // -> filename.jpg
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      // 마지막 부분이 파일명
-      return pathParts[pathParts.length - 1];
-    } catch (error) {
-      console.error('URL 파싱 오류:', error);
-      return null;
+    // 에디터 내용 초기화
+    if (editor) {
+      editor.commands.clearContent();
     }
   };
 
   // 이전 이미지 삭제 함수
-  const deleteOldImage = async (oldImageUrl: string | null): Promise<void> => {
+  const deleteOldImage = async (oldImageUrl: string | null) => {
     if (!oldImageUrl) return;
     
     try {
-      const filePath = extractFilePathFromUrl(oldImageUrl);
+      const filePath = extractPathFromUrl(oldImageUrl);
       if (!filePath) {
-        console.warn('이전 이미지 경로를 추출할 수 없습니다:', oldImageUrl);
+        logger.warn('이전 이미지 경로를 추출할 수 없습니다:', oldImageUrl);
         return;
       }
       
-      console.log('이전 이미지 삭제 시도:', filePath);
+      logger.debug('이전 이미지 삭제 시도:', filePath);
       
       const { error } = await supabase.storage
         .from('images')
         .remove([filePath]);
-        
+      
       if (error) {
-        console.error('이전 이미지 삭제 오류:', error);
-      } else {
-        console.log('이전 이미지 삭제 성공:', filePath);
+        logger.error('이전 이미지 삭제 오류:', error);
+        return;
       }
+      
+      logger.debug('이전 이미지 삭제 성공:', filePath);
     } catch (error) {
-      console.error('이미지 삭제 중 오류 발생:', error);
+      logger.error('이미지 삭제 중 오류 발생:', error);
+    }
+  };
+
+  const uploadImage = async (imageFile: File): Promise<string | null> => {
+    try {
+      logger.debug('이미지 업로드 시도:', imageFile.name, imageFile.size);
+      
+      // 이미지 파일 크기 확인 (10MB 제한)
+      if (imageFile.size > 10 * 1024 * 1024) {
+        throw new Error('이미지 크기는 10MB 이하여야 합니다.');
+      }
+      
+      // 파일 확장자 확인
+      const fileExt = imageFile.name.split('.').pop()?.toLowerCase();
+      if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+        throw new Error('지원되는 이미지 형식은 JPG, PNG, GIF, WEBP입니다.');
+      }
+      
+      // 파일명 생성 (경로에 특수문자 제거)
+      const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
+      const filePath = `${fileName}`;
+      
+      logger.debug('업로드 경로:', filePath);
+      
+      // 이전 이미지 URL 저장 (나중에 삭제하기 위해)
+      let oldImageUrl = null;
+      if (isEdit && initialData?.product_image_url) {
+        oldImageUrl = initialData.product_image_url;
+      }
+      
+      // 이미지 업로드 시도
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(filePath, imageFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
+        
+      if (uploadError) {
+        logger.error('Supabase 업로드 오류:', uploadError);
+        return null;
+      }
+      
+      logger.debug('업로드 성공:', uploadData);
+      
+      // 업로드된 이미지의 공개 URL 가져오기
+      const { data } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+        
+      const product_image_url = data.publicUrl;
+      logger.debug('이미지 URL:', product_image_url);
+      return product_image_url;
+    } catch (error) {
+      logger.error('이미지 처리 중 오류:', error);
+      return null;
     }
   };
 
@@ -164,54 +216,9 @@ export default function ProductForm({
       // 이미지 파일이 있으면 스토리지에 업로드
       if (imageFile) {
         try {
-          console.log('이미지 업로드 시도:', imageFile.name, imageFile.size);
-          
-          // 이미지 파일 크기 확인 (10MB 제한)
-          if (imageFile.size > 10 * 1024 * 1024) {
-            throw new Error('이미지 크기는 10MB 이하여야 합니다.');
-          }
-          
-          // 파일 확장자 확인
-          const fileExt = imageFile.name.split('.').pop()?.toLowerCase();
-          if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
-            throw new Error('지원되는 이미지 형식은 JPG, PNG, GIF, WEBP입니다.');
-          }
-          
-          // 파일명 생성 (경로에 특수문자 제거)
-          const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
-          const filePath = `${fileName}`;
-          
-          console.log('업로드 경로:', filePath);
-          
-          // 이전 이미지 URL 저장 (나중에 삭제하기 위해)
-          if (isEdit && initialData?.product_image_url) {
-            oldImageUrl = initialData.product_image_url;
-          }
-          
-          // 이미지 업로드 시도
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('images')
-            .upload(filePath, imageFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
-            
-          if (uploadError) {
-            console.error('Supabase 업로드 오류:', uploadError);
-            throw uploadError;
-          }
-          
-          console.log('업로드 성공:', uploadData);
-          
-          // 업로드된 이미지의 공개 URL 가져오기
-          const { data } = supabase.storage
-            .from('images')
-            .getPublicUrl(filePath);
-            
-          product_image_url = data.publicUrl;
-          console.log('이미지 URL:', product_image_url);
+          product_image_url = await uploadImage(imageFile);
         } catch (imageError: any) {
-          console.error('이미지 처리 중 오류:', imageError);
+          logger.error('이미지 처리 중 오류:', imageError);
           
           // 이미지 업로드 실패 시 사용자에게 알림
           const errorMessage = imageError.message || '이미지 업로드에 실패했습니다.';
@@ -239,7 +246,7 @@ export default function ProductForm({
       const productData = {
         store_id: storeId,
         product_name: formData.product_name,
-        product_description: formData.product_description,
+        product_description: editor ? editor.getHTML() : formData.product_description,
         price: formData.price,
         stock: formData.stock,
         is_available: formData.is_available,
@@ -247,7 +254,7 @@ export default function ProductForm({
         category: formData.category,
       };
       
-      console.log('저장할 제품 데이터:', productData);
+      logger.debug('저장할 제품 데이터:', productData);
       
       if (isEdit && productId) {
         // 제품 수정
@@ -257,7 +264,7 @@ export default function ProductForm({
           .eq('id', productId);
           
         if (error) {
-          console.error('제품 수정 오류:', error);
+          logger.error('제품 수정 오류:', error);
           throw error;
         }
         
@@ -274,14 +281,14 @@ export default function ProductForm({
             try {
               // 파일 크기 확인
               if (imageFile.size > 10 * 1024 * 1024) {
-                console.warn(`이미지 ${i+1}의 크기가 10MB를 초과합니다. 건너뜁니다.`);
+                logger.warn(`이미지 ${i+1}의 크기가 10MB를 초과합니다. 건너뜁니다.`);
                 continue;
               }
               
               // 파일 확장자 확인
               const fileExt = imageFile.name.split('.').pop()?.toLowerCase();
               if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
-                console.warn(`이미지 ${i+1}의 형식이 지원되지 않습니다. 건너뜁니다.`);
+                logger.warn(`이미지 ${i+1}의 형식이 지원되지 않습니다. 건너뜁니다.`);
                 continue;
               }
               
@@ -289,24 +296,7 @@ export default function ProductForm({
               const fileName = `products/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
               
               // 이미지 업로드
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(fileName, imageFile, {
-                  cacheControl: '3600',
-                  upsert: false
-                });
-                
-              if (uploadError) {
-                console.error(`추가 이미지 ${i+1} 업로드 오류:`, uploadError);
-                continue;
-              }
-              
-              // 업로드된 이미지의 공개 URL 가져오기
-              const { data } = supabase.storage
-                .from('images')
-                .getPublicUrl(fileName);
-                
-              const image_url = data.publicUrl;
+              const image_url = await uploadImage(imageFile);
               
               // product_images 테이블에 저장
               const { error: insertError } = await supabase
@@ -319,10 +309,10 @@ export default function ProductForm({
                 });
                 
               if (insertError) {
-                console.error(`추가 이미지 ${i+1} 저장 오류:`, insertError);
+                logger.error(`추가 이미지 ${i+1} 저장 오류:`, insertError);
               }
             } catch (error) {
-              console.error(`추가 이미지 ${i+1} 처리 중 오류:`, error);
+              logger.error(`추가 이미지 ${i+1} 처리 중 오류:`, error);
             }
           }
         }
@@ -345,7 +335,7 @@ export default function ProductForm({
           .single();
           
         if (error) {
-          console.error('제품 등록 오류:', error);
+          logger.error('제품 등록 오류:', error);
           throw error;
         }
         
@@ -357,14 +347,14 @@ export default function ProductForm({
             try {
               // 파일 크기 확인
               if (imageFile.size > 10 * 1024 * 1024) {
-                console.warn(`이미지 ${i+1}의 크기가 10MB를 초과합니다. 건너뜁니다.`);
+                logger.warn(`이미지 ${i+1}의 크기가 10MB를 초과합니다. 건너뜁니다.`);
                 continue;
               }
               
               // 파일 확장자 확인
               const fileExt = imageFile.name.split('.').pop()?.toLowerCase();
               if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
-                console.warn(`이미지 ${i+1}의 형식이 지원되지 않습니다. 건너뜁니다.`);
+                logger.warn(`이미지 ${i+1}의 형식이 지원되지 않습니다. 건너뜁니다.`);
                 continue;
               }
               
@@ -372,24 +362,7 @@ export default function ProductForm({
               const fileName = `products/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
               
               // 이미지 업로드
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('images')
-                .upload(fileName, imageFile, {
-                  cacheControl: '3600',
-                  upsert: false
-                });
-                
-              if (uploadError) {
-                console.error(`추가 이미지 ${i+1} 업로드 오류:`, uploadError);
-                continue;
-              }
-              
-              // 업로드된 이미지의 공개 URL 가져오기
-              const { data } = supabase.storage
-                .from('images')
-                .getPublicUrl(fileName);
-                
-              const image_url = data.publicUrl;
+              const image_url = await uploadImage(imageFile);
               
               // product_images 테이블에 저장
               const { error: insertError } = await supabase
@@ -402,10 +375,10 @@ export default function ProductForm({
                 });
                 
               if (insertError) {
-                console.error(`추가 이미지 ${i+1} 저장 오류:`, insertError);
+                logger.error(`추가 이미지 ${i+1} 저장 오류:`, insertError);
               }
             } catch (error) {
-              console.error(`추가 이미지 ${i+1} 처리 중 오류:`, error);
+              logger.error(`추가 이미지 ${i+1} 처리 중 오류:`, error);
             }
           }
         }
@@ -435,7 +408,7 @@ export default function ProductForm({
         }
       }
     } catch (error: any) {
-      console.error('제품 저장 중 오류 발생:', error);
+      logger.error('제품 저장 중 오류 발생:', error);
       setMessage({
         text: `제품 저장 중 오류가 발생했습니다: ${error.message || JSON.stringify(error)}`,
         type: 'error'
@@ -445,187 +418,68 @@ export default function ProductForm({
     }
   };
 
-  const handleTextSelection = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-      setTextSelection(null);
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-
-    setTextSelection({
-      start: 0,
-      end: 0,
-      text: selection.toString(),
-      x: rect.left + rect.width / 2,
-      y: rect.top - 40
-    });
-  };
-
-  // 텍스트 스타일 적용 함수
-  const applyTextStyle = (command: string, value?: string) => {
-    if (textareaRef.current) {
-      // 먼저 에디터에 포커스 주기
-      textareaRef.current.focus();
-      
-      // 특별한 명령 처리
-      if (command === 'heading') {
-        const selection = window.getSelection();
-        const selectedText = selection?.toString() || '제목';
-        
-        if (value === 'h2') {
-          document.execCommand('insertHTML', false, `<h2>${selectedText}</h2>`);
-        } else if (value === 'h3') {
-          document.execCommand('insertHTML', false, `<h3>${selectedText}</h3>`);
-        } else if (value === 'h4') {
-          document.execCommand('insertHTML', false, `<h4>${selectedText}</h4>`);
-        }
-        return;
-      }
-      
-      // 본문 문단 처리
-      if (command === 'paragraph') {
-        const selection = window.getSelection();
-        const selectedText = selection?.toString() || '본문 텍스트';
-        document.execCommand('insertHTML', false, `<p class="paragraph">${selectedText}</p>`);
-        return;
-      }
-      
-      // 참고문(작은글씨) 처리
-      if (command === 'smallText') {
-        const selection = window.getSelection();
-        const selectedText = selection?.toString() || '참고 텍스트';
-        document.execCommand('insertHTML', false, `<p class="small-text">${selectedText}</p>`);
-        return;
-      }
-      
-      // 선택 영역이 없으면 현재 커서 위치에 적용
-      if (!window.getSelection()?.toString()) {
-        // 빈 텍스트가 선택된 경우 새로운 볼드 텍스트 추가
-        if (command === 'bold') {
-          document.execCommand('insertHTML', false, '<strong>텍스트</strong>');
-        } else if (command === 'italic') {
-          document.execCommand('insertHTML', false, '<em>텍스트</em>');
-        } else if (command === 'underline') {
-          document.execCommand('insertHTML', false, '<u>텍스트</u>');
-        } else {
-          document.execCommand(command, false, value);
-        }
-      } else {
-        // 선택 영역이 있으면 해당 영역에 적용
-        document.execCommand(command, false, value);
-      }
-      
-      // 현재 내용을 formData에 저장
-      setFormData({
-        ...formData,
-        product_description: textareaRef.current.innerHTML
-      });
-    }
-  };
-
-  // 선택 영역에 볼드체 적용 (팝업 메뉴에서 사용)
-  const applyBold = () => {
-    if (!textSelection && !textareaRef.current) return;
-    
-    // 먼저 에디터에 포커스 주기
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-    
-    // 볼드체 적용
-    document.execCommand('bold', false);
-    
-    // 팝업 메뉴 닫기
-    setTextSelection(null);
-    
-    // 현재 내용을 formData에 저장
-    if (textareaRef.current) {
-      setFormData({
-        ...formData,
-        product_description: textareaRef.current.innerHTML
-      });
-    }
-  };
-
-  const handleContentChange = () => {
-    if (textareaRef.current) {
-      setFormData({
-        ...formData,
-        product_description: textareaRef.current.innerHTML
-      });
-      
-      // 콘텐츠가 변경될 때 포커스 유지
-      textareaRef.current.focus();
-    }
-  };
-
-  // 클릭 이벤트 핸들러 - 선택 영역 외부 클릭 시 도구 닫기
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (textSelection && textareaRef.current && !textareaRef.current.contains(e.target as Node)) {
-        setTextSelection(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [textSelection]);
-
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* 에디터 스타일 정의 - contentEditable 요소 외부로 이동 */}
       <style>
         {`
-        .rich-editor h2 {
+        .ProseMirror {
+          min-height: 200px;
+          padding: 0.75rem 1rem;
+          outline: none;
+          line-height: 1.5;
+        }
+        .ProseMirror p {
+          margin-bottom: 0.5rem;
+        }
+        .ProseMirror h2 {
           font-size: 1.5rem;
           font-weight: 600;
           margin: 1rem 0;
           color: #111;
         }
-        .rich-editor h3 {
+        .ProseMirror h3 {
           font-size: 1.25rem;
           font-weight: 600;
           margin: 0.8rem 0;
           color: #333;
         }
-        .rich-editor h4 {
+        .ProseMirror h4 {
           font-size: 1.125rem;
           font-weight: 600;
           margin: 0.6rem 0;
           color: #444;
         }
-        .rich-editor .paragraph {
+        .ProseMirror .paragraph {
           margin: 0.5rem 0;
           line-height: 1.6;
         }
-        .rich-editor .small-text {
+        .ProseMirror .small-text {
           font-size: 0.875rem;
           color: #666;
           line-height: 1.4;
         }
-        .rich-editor strong {
+        .ProseMirror strong {
           font-weight: 700;
         }
-        .rich-editor em {
+        .ProseMirror em {
           font-style: italic;
         }
-        .rich-editor u {
+        .ProseMirror u {
           text-decoration: underline;
         }
-        .rich-editor ul, .rich-editor ol {
+        .ProseMirror ul, .ProseMirror ol {
           margin-left: 1.5rem;
           margin-bottom: 1rem;
         }
-        .rich-editor ul li {
+        .ProseMirror ul li {
           list-style-type: disc;
         }
-        .rich-editor ol li {
+        .ProseMirror ol li {
           list-style-type: decimal;
+        }
+        .is-active {
+          background-color: #f3f4f6;
         }
         `}
       </style>
@@ -658,12 +512,12 @@ export default function ProductForm({
             제품 설명
           </label>
           
-          {/* 에디터 도구 모음 */}
+          {/* Tiptap 에디터 도구 모음 */}
           <div className="flex flex-wrap items-center gap-1 mb-2 border border-gray-200 rounded-lg p-1 bg-white">
             <button
               type="button"
-              onClick={applyBold}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleBold().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('bold') ? 'is-active' : ''}`}
               title="볼드체 (굵게)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -674,8 +528,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('italic')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleItalic().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('italic') ? 'is-active' : ''}`}
               title="이탤릭체 (기울임)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -687,8 +541,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('underline')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('underline') ? 'is-active' : ''}`}
               title="밑줄"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -701,8 +555,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('heading', 'h2')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('heading', { level: 2 }) ? 'is-active' : ''}`}
               title="큰 제목"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -717,8 +571,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('heading', 'h3')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('heading', { level: 3 }) ? 'is-active' : ''}`}
               title="중간 제목"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -733,8 +587,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('heading', 'h4')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 4 }).run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('heading', { level: 4 }) ? 'is-active' : ''}`}
               title="작은 제목"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -751,8 +605,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('paragraph')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().setParagraph().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('paragraph') ? 'is-active' : ''}`}
               title="본문 문단"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -762,25 +616,12 @@ export default function ProductForm({
               </svg>
             </button>
             
-            <button
-              type="button"
-              onClick={() => applyTextStyle('smallText')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
-              title="참고문구 (작은글씨)"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                <line x1="9" y1="20" x2="15" y2="20"></line>
-                <line x1="12" y1="4" x2="12" y2="20"></line>
-              </svg>
-            </button>
-            
             <span className="w-px h-6 bg-gray-200 mx-1"></span>
             
             <button
               type="button"
-              onClick={() => applyTextStyle('insertUnorderedList')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleBulletList().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('bulletList') ? 'is-active' : ''}`}
               title="글머리 기호 목록"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -795,8 +636,8 @@ export default function ProductForm({
             
             <button
               type="button"
-              onClick={() => applyTextStyle('insertOrderedList')}
-              className="p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors"
+              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+              className={`p-2 hover:bg-gray-100 rounded text-gray-700 transition-colors ${editor?.isActive('orderedList') ? 'is-active' : ''}`}
               title="번호 매기기"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -811,63 +652,13 @@ export default function ProductForm({
           </div>
           
           <div className="relative">
-            <div
-              ref={textareaRef}
-              contentEditable="true"
-              onMouseUp={handleTextSelection}
-              onKeyUp={handleTextSelection}
-              onInput={handleContentChange}
-              className="rich-editor w-full px-4 py-3 border border-gray-200 rounded-lg focus:border-black focus:outline-none min-h-[200px] text-base font-pretendard"
-              style={{ lineHeight: '1.5' }}
-            ></div>
-            {textSelection && (
-              <div 
-                className="absolute z-10 bg-white border border-gray-200 rounded-md shadow-lg flex items-center"
-                style={{
-                  left: `${textSelection.x}px`,
-                  top: `${textSelection.y}px`,
-                  transform: 'translateX(-50%)'
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={applyBold}
-                  className="p-2 hover:bg-gray-100 rounded-l-md text-gray-700 transition-colors border-r border-gray-200"
-                  title="볼드체 (굵게)"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-                    <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTextStyle('italic')}
-                  className="p-2 hover:bg-gray-100 text-gray-700 transition-colors border-r border-gray-200"
-                  title="이탤릭체 (기울임)"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="19" y1="4" x2="10" y2="4"></line>
-                    <line x1="14" y1="20" x2="5" y2="20"></line>
-                    <line x1="15" y1="4" x2="9" y2="20"></line>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyTextStyle('underline')}
-                  className="p-2 hover:bg-gray-100 rounded-r-md text-gray-700 transition-colors"
-                  title="밑줄"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"></path>
-                    <line x1="4" y1="21" x2="20" y2="21"></line>
-                  </svg>
-                </button>
-              </div>
-            )}
+            {/* Tiptap 에디터 컨텐츠 영역 */}
+            <div className="border border-gray-200 rounded-lg focus-within:border-black overflow-hidden">
+              <EditorContent editor={editor} className="font-pretendard text-base" />
+            </div>
           </div>
           <div className="mt-2 text-xs text-gray-500 font-pretendard">
-            <span>텍스트를 드래그하여 서식을 적용하거나, 위의 도구 모음에서 원하는 서식을 선택하세요.</span>
+            <span>위의 도구 모음에서 원하는 서식을 선택하세요.</span>
           </div>
         </div>
         

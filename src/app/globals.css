@@ -8,9 +8,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  
+  /* 폰트 CSS 변수 */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-pretendard: var(--font-pretendard);
+  --font-korean: var(--font-noto-sans-kr);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -25,8 +27,17 @@ body {
   color: var(--foreground);
 }
 
-.font-pretendard {
-  font-family: var(--font-pretendard), var(--font-sans), sans-serif;
+/* 텍스트 스타일 유틸리티 클래스 */
+.text-korean {
+  font-family: var(--font-korean), system-ui, sans-serif;
+}
+
+.text-english {
+  font-family: var(--font-sans), sans-serif;
+}
+
+.text-code {
+  font-family: var(--font-mono), monospace;
 }
 
 /* Dior 스타일 프로그레스 바 애니메이션 */

@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
+import logger from '@/lib/logger';
 
 type UserData = {
   id: string;
@@ -93,7 +94,7 @@ export default function ProfileSidebar() {
           setVendorUserData(vendorData as VendorUserData);
         }
       } catch (error: any) {
-        console.error('사용자 정보 조회 오류:', error);
+        logger.error('사용자 정보 조회 오류:', error);
         setError(error.message || '사용자 정보를 불러오는데 실패했습니다.');
       } finally {
         setLoadingProfile(false);
@@ -126,7 +127,7 @@ export default function ProfileSidebar() {
       await signOut();
       router.push('/');
     } catch (error: any) {
-      console.error('회원 탈퇴 오류:', error);
+      logger.error('회원 탈퇴 오류:', error);
       setDeleteError(error.message || '회원 탈퇴 처리 중 오류가 발생했습니다.');
       setIsDeleting(false);
     }

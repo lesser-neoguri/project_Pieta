@@ -337,7 +337,7 @@ export default function CartPage() {
   };
 
   return (
-    <MainLayout showNav={true} showLogo={true} centered={false}>
+    <MainLayout centered={false}>
       <div className="flex flex-col min-h-screen">
         {/* 상단 타이틀 */}
         <div className="py-8 text-center border-b border-gray-200">

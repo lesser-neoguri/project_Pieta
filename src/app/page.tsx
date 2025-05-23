@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTransition } from '@/contexts/TransitionContext';
 
@@ -35,19 +34,11 @@ export default function HomePage() {
               muted
               playsInline
               className="absolute w-full h-full object-cover"
-              poster="/images/hero-bg.jpg" // 비디오 로딩 전에 표시할 이미지
             >
-              <source src="https://gbqguwfaqhmbdypbghqo.supabase.co/storage/v1/object/public/images/mainVD.mp4" type="video/mp4" />
-              {/* 비디오 로드 실패 시 이미지로 폴백 */}
+              <source src="/videos/mainVD.mp4" type="video/mp4" />
             </video>
-            {/* 폴백 이미지 - 비디오 실패 시 표시 */}
-            <Image
-              src="/images/hero-bg.jpg"
-              alt="Background"
-              fill
-              className="object-cover z-[-1]"
-              priority
-            />
+            {/* 비디오가 로드되지 않을 때 표시할 대체 배경 */}
+            <div className="absolute inset-0 bg-gray-900 z-[-1]"></div>
           </div>
           {/* 비디오/이미지 위에 그라데이션 오버레이 추가 */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/30" />
@@ -130,16 +121,8 @@ export default function HomePage() {
             더 알아보기
           </a>
         </div>
-        {/* 배경 이미지 투명도 조정 */}
-        <div className="absolute inset-0 z-0 opacity-40">
-          <Image
-            src="/images/collection-bg.jpg"
-            alt="Collection"
-            fill
-            className="object-cover"
-            priority
-          />
-        </div>
+        {/* 배경 색상 설정 */}
+        <div className="absolute inset-0 z-0 bg-gray-100"></div>
       </div>
 
       {/* Features Section */}

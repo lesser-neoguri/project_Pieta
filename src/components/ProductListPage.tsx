@@ -2,24 +2,12 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { useEffect, useState, ReactNode, useCallback } from 'react';
+import { useEffect, useState, ReactNode, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import MainLayout from '@/components/layout/MainLayout';
-
-// 스로틀 헬퍼 함수 추가
-function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let lastCall = 0;
-  return (...args: Parameters<T>) => {
-    const now = Date.now();
-    if (now - lastCall >= delay) {
-      lastCall = now;
-      func(...args);
-    }
-  };
-}
+import logger from '@/lib/logger';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useScroll } from '@/hooks/useScroll';
 
 export type ProductData = {
   id: string;
@@ -62,129 +50,146 @@ export default function ProductListPage({
   categoryType = 'uppercase'
 }: ProductListPageProps) {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<ProductData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // 스크롤 위치 감지를 위한 상태 추가
-  const [scrollY, setScrollY] = useState(0);
-  // 배너 높이 계산 (스크롤에 따라 더 부드럽게 줄어듦: 최대 70vh에서 최소 30vh까지)
-  const bannerHeight = Math.max(30, 70 - (scrollY * 0.12));
+  // useScroll 훅으로 스크롤 이벤트 처리
+  const { scrollY } = useScroll({ throttleDelay: 20 });
+  
+  // URL 파라미터에서 카테고리 값을 읽어와 초기 상태 설정
+  const initialCategory = searchParams.get('category') || 'all';
   
   // 필터링 및 정렬 상태
   const [sortOption, setSortOption] = useState('newest');
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
 
-  // 메모이제이션된 스로틀 함수 생성
-  const handleScroll = useCallback(
-    throttle(() => {
-      requestAnimationFrame(() => {
-        setScrollY(window.scrollY);
-      });
-    }, 20), // 약간 늘린 간격으로 스로틀링 적용
-    []
-  );
+  // 배너 높이 계산 - useMemo로 최적화
+  const bannerHeight = useMemo(() => {
+    return Math.max(30, 70 - (scrollY * 0.12));
+  }, [scrollY]);
 
-  // 스크롤 이벤트 리스너 추가
-  useEffect(() => {
-    // 스크롤 이벤트 리스너 등록
-    window.addEventListener('scroll', handleScroll);
-    
-    // 컴포넌트 언마운트 시 이벤트 리스너 정리
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, [handleScroll]);
+  // 제품 필터링 로직 메모이제이션
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        let query = supabase
-          .from('products')
-          .select(`
-            *,
-            stores:store_id (
-              store_name
-            )
-          `);
-        
-        // 카테고리 필터링
-        if (selectedCategory !== 'all') {
-          query = query.eq('category', selectedCategory);
-        }
-        
-        // 상품 유형 필터링 (주얼리, 투자 등)
-        if (productFilter) {
-          query = query.or(productFilter);
-        }
-        
-        // 품절 상품 표시 여부
-        if (!showUnavailable) {
-          query = query.eq('is_available', true);
-        }
-        
-        // 정렬 옵션 적용
-        switch (sortOption) {
-          case 'newest':
-            query = query.order('created_at', { ascending: false });
-            break;
-          case 'price_asc':
-            query = query.order('price', { ascending: true });
-            break;
-          case 'price_desc':
-            query = query.order('price', { ascending: false });
-            break;
-          case 'rating':
-            query = query.order('average_rating', { ascending: false });
-            break;
-          default:
-            query = query.order('created_at', { ascending: false });
-        }
-        
-        const { data: productsData, error: productsError } = await query.limit(100);
-
-        if (productsError) {
-          throw productsError;
-        }
-
-        if (productsData) {
-          // 가져온 제품 데이터에 상점 이름 추가
-          let filteredProducts = productsData.map((product: any) => ({
-            ...product,
-            store_name: product.stores?.store_name || '알 수 없는 상점'
-          }));
-          
-          // 검색어 필터링 (클라이언트 측)
-          if (searchQuery.trim()) {
-            const searchLower = searchQuery.toLowerCase().trim();
-            filteredProducts = filteredProducts.filter(
-              product =>
-                product.product_name.toLowerCase().includes(searchLower) ||
-                (product.product_description && product.product_description.toLowerCase().includes(searchLower)) ||
-                product.store_name.toLowerCase().includes(searchLower)
-            );
-          }
-          
-          setProducts(filteredProducts);
-        }
-      } catch (error: any) {
-        console.error('제품 데이터 로딩 중 오류 발생:', error);
-        setError('제품 정보를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setLoading(false);
+      let query = supabase
+        .from('products')
+        .select(`
+          *,
+          stores:store_id (
+            store_name
+          )
+        `);
+      
+      // 카테고리 필터링
+      if (selectedCategory !== 'all') {
+        query = query.eq('category', selectedCategory);
       }
-    };
+      
+      // 상품 유형 필터링 (주얼리, 투자 등)
+      if (productFilter) {
+        query = query.or(productFilter);
+      }
+      
+      // 품절 상품 표시 여부
+      if (!showUnavailable) {
+        query = query.eq('is_available', true);
+      }
+      
+      // 정렬 옵션 적용
+      switch (sortOption) {
+        case 'newest':
+          query = query.order('created_at', { ascending: false });
+          break;
+        case 'price_asc':
+          query = query.order('price', { ascending: true });
+          break;
+        case 'price_desc':
+          query = query.order('price', { ascending: false });
+          break;
+        case 'rating':
+          query = query.order('average_rating', { ascending: false });
+          break;
+        default:
+          query = query.order('created_at', { ascending: false });
+      }
+      
+      const { data: productsData, error: productsError } = await query.limit(100);
 
-    fetchProducts();
+      if (productsError) {
+        throw productsError;
+      }
+
+      if (productsData) {
+        // 가져온 제품 데이터에 상점 이름 추가
+        let filteredProducts = productsData.map((product: any) => ({
+          ...product,
+          store_name: product.stores?.store_name || '알 수 없는 상점'
+        }));
+        
+        // 검색어 필터링 (클라이언트 측)
+        if (searchQuery.trim()) {
+          const searchLower = searchQuery.toLowerCase().trim();
+          filteredProducts = filteredProducts.filter(
+            product =>
+              product.product_name.toLowerCase().includes(searchLower) ||
+              (product.product_description && product.product_description.toLowerCase().includes(searchLower)) ||
+              product.store_name.toLowerCase().includes(searchLower)
+          );
+        }
+        
+        setProducts(filteredProducts);
+      }
+    } catch (error: any) {
+      logger.error('제품 데이터 로딩 중 오류 발생:', error);
+      setError('제품 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
   }, [sortOption, showUnavailable, searchQuery, selectedCategory, productFilter]);
 
+  // 필터 변경 시 데이터 로드
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // 카테고리 변경 핸들러 업데이트
+  const handleCategoryChange = useCallback((categoryId: string) => {
+    setSelectedCategory(categoryId);
+    
+    // URL 파라미터 업데이트
+    const params = new URLSearchParams(searchParams.toString());
+    if (categoryId === 'all') {
+      params.delete('category');
+    } else {
+      params.set('category', categoryId);
+    }
+    
+    // 현재 경로 유지하면서 파라미터만 업데이트
+    router.push(`${pathname}?${params.toString()}`);
+  }, [searchParams, router, pathname]);
+
+  // 검색어 변경 핸들러
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  }, []);
+
+  // 필터 초기화 핸들러
+  const handleResetFilters = useCallback(() => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+  }, []);
+
   return (
-    <MainLayout showLogo={false} centered={false}>
+    <MainLayout centered={false}>
       <div className="min-h-screen bg-white -mt-16 sm:-mt-20 md:-mt-24">
         {/* 메인 비주얼 - 스크롤에 따라 높이가 변하도록 수정 */}
         <div 
@@ -220,7 +225,7 @@ export default function ProductListPage({
                   {categories.map((category) => (
                     <button
                       key={category.id}
-                      onClick={() => setSelectedCategory(category.id)}
+                      onClick={() => handleCategoryChange(category.id)}
                       className={`text-sm font-light tracking-widest transition-all whitespace-nowrap ${
                         selectedCategory === category.id
                           ? 'text-black border-b-2 border-black'
@@ -246,7 +251,7 @@ export default function ProductListPage({
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={handleSearchChange}
                     placeholder="제품명 또는 상점명으로 검색"
                     className="w-full px-4 py-3 border-b border-gray-200 focus:outline-none focus:border-black transition-colors text-sm bg-transparent"
                   />
@@ -301,7 +306,7 @@ export default function ProductListPage({
               <p className="text-red-500 mb-6">{error}</p>
               <button 
                 className="px-10 py-3 border border-black bg-black text-white text-sm uppercase tracking-widest hover:bg-white hover:text-black transition-colors duration-300"
-                onClick={() => window.location.reload()}
+                onClick={fetchProducts}
               >
                 새로고침
               </button>
@@ -312,10 +317,7 @@ export default function ProductListPage({
               <p className="text-sm text-gray-500 mb-8">다른 검색어나 필터를 사용해보세요.</p>
               <button 
                 className="px-10 py-3 border border-black bg-transparent text-black text-sm uppercase tracking-widest hover:bg-black hover:text-white transition-colors duration-300"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('all');
-                }}
+                onClick={handleResetFilters}
               >
                 필터 초기화
               </button>

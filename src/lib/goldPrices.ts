@@ -1,4 +1,5 @@
 import axios from 'axios';
+import logger from '@/lib/logger';
 
 export type PriceInfo = {
   type: string;
@@ -18,7 +19,7 @@ export async function fetchGoldPrices(): Promise<{priceData: PriceInfo[], timest
       timestamp: data.timestamp
     };
   } catch (error) {
-    console.error('금시세 데이터 가져오기 실패:', error);
+    logger.error('금시세 데이터 가져오기 실패:', error);
     
     // 오류 발생 시 기본 데이터 반환
     return {

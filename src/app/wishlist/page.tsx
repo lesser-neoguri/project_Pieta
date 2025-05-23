@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
+import logger from '@/lib/logger';
 
 type WishlistItem = {
   id: string;
@@ -80,7 +81,7 @@ export default function WishlistPage() {
 
         setWishlistItems(transformedItems);
       } catch (error: any) {
-        console.error('찜목록을 불러오는 중 오류가 발생했습니다:', error);
+        logger.error('찜목록을 불러오는 중 오류가 발생했습니다:', error);
         setError('찜목록을 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
@@ -110,13 +111,13 @@ export default function WishlistPage() {
       // UI 업데이트
       setWishlistItems((prev) => prev.filter((item) => item.id !== itemId));
     } catch (error: any) {
-      console.error('항목 삭제 중 오류가 발생했습니다:', error);
+      logger.error('항목 삭제 중 오류가 발생했습니다:', error);
       alert('항목 삭제 중 오류가 발생했습니다.');
     }
   };
 
   return (
-    <MainLayout showNav={true} showLogo={true} centered={false}>
+    <MainLayout centered={false}>
       <div className="max-w-6xl mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-3xl font-light uppercase tracking-[0.2em] mb-3">찜목록</h1>

@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DOMPurify from 'dompurify';
 import { X } from 'lucide-react';
+import { extractPathFromUrl } from '@/lib/migration';
+import { toast } from 'react-hot-toast';
+import { useScroll } from '@/hooks/useScroll';
 
 // 네비게이션 바 컨트롤을 위한 사용자 정의 이벤트 추가
 const emitNavbarEvent = (hide: boolean) => {
@@ -15,21 +18,6 @@ const emitNavbarEvent = (hide: boolean) => {
     window.dispatchEvent(event);
   }
 };
-
-// 스로틀 함수 추가
-function throttle<T extends (...args: any[]) => any>(
-  func: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let lastCall = 0;
-  return (...args: Parameters<T>) => {
-    const now = Date.now();
-    if (now - lastCall >= delay) {
-      lastCall = now;
-      func(...args);
-    }
-  };
-}
 
 // 스크롤 처리를 위한 이전 스크롤 위치 저장 변수
 let prevScrollPos = 0;
@@ -130,6 +118,437 @@ export default function ProductDetailPage() {
   const [recentlyViewedProducts, setRecentlyViewedProducts] = useState<ProductData[]>([]);
   const [additionalProductsLoading, setAdditionalProductsLoading] = useState(true);
 
+  // useScroll 훅 사용
+  const { scrollY, direction } = useScroll({
+    detectDirection: true,
+    throttleDelay: 50
+  });
+  
+  // 스크롤 방향에 따라 네비게이션 표시/숨김 처리
+  useEffect(() => {
+    if (direction === 'down') {
+      emitNavbarEvent(true); // 아래로 스크롤 시 네비게이션 숨김
+    } else if (direction === 'up') {
+      emitNavbarEvent(false); // 위로 스크롤 시 네비게이션 표시
+    }
+  }, [direction]);
+  
+  // 관심 수 증감 함수 최적화
+  const incrementFavoriteCount = useCallback(() => {
+    setFavoriteCount(prev => Math.max(0, prev + 1));
+  }, []);
+  
+  const decrementFavoriteCount = useCallback(() => {
+    setFavoriteCount(prev => Math.max(0, prev - 1));
+  }, []);
+  
+  // 리뷰 새로고침 함수 추가
+  const refreshReviews = useCallback(async () => {
+    try {
+      setReviewLoading(true);
+      
+      // 리뷰 정보 가져오기
+      const { data: reviewData, error: reviewError } = await supabase
+        .from('product_reviews')
+        .select('*')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false });
+
+      if (reviewError) {
+        console.error('리뷰 정보 조회 오류:', reviewError);
+        setReviews([]);
+        return;
+      }
+      
+      if (reviewData && reviewData.length > 0) {
+        // 리뷰 작성자 정보 가져오기
+        const reviewsWithUserNames = await Promise.all(
+          reviewData.map(async (review: any) => {
+            try {
+              // 사용자 정보 가져오기
+              const { data: userData, error: userError } = await supabase
+                .from('regular_users')
+                .select('name')
+                .eq('user_id', review.user_id)
+                .maybeSingle();
+              
+              return {
+                ...review,
+                user_name: userData?.name || '익명 사용자'
+              };
+            } catch (error) {
+              console.error('사용자 정보 로딩 중 오류:', error);
+              return {
+                ...review,
+                user_name: '익명 사용자'
+              };
+            }
+          })
+        );
+        
+        setReviews(reviewsWithUserNames);
+        
+        // 현재 사용자가 이미 리뷰를 작성했는지 확인
+        if (user) {
+          const userReviewData = reviewsWithUserNames.find(
+            (review: ProductReview) => review.user_id === user.id
+          );
+          
+          setUserHasReviewed(!!userReviewData);
+          setUserReview(userReviewData || null);
+        } else {
+          setUserHasReviewed(false);
+          setUserReview(null);
+        }
+      } else {
+        // 리뷰가 없는 경우
+        setReviews([]);
+        setUserHasReviewed(false);
+        setUserReview(null);
+      }
+      
+      // 제품 정보 다시 가져오기 (평균 평점 업데이트를 위해)
+      const { data: updatedProduct, error: productError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', productId)
+        .single();
+        
+      if (!productError && updatedProduct) {
+        setProduct(updatedProduct);
+      }
+    } catch (error) {
+      console.error('리뷰 새로고침 중 오류:', error);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [productId, user]);
+  
+  // 리뷰 제출 함수 추가
+  const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      alert('로그인이 필요한 기능입니다.');
+      return;
+    }
+
+    if (reviewForm.review_text.trim() === '') {
+      alert('리뷰 내용을 입력해주세요.');
+      return;
+    }
+
+    setReviewSubmitting(true);
+
+    try {
+      let reviewImageUrl = null;
+
+      // 이미지 업로드 처리
+      if (reviewImageFile) {
+        const fileExt = reviewImageFile.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const filePath = `reviews/${productId}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('images')
+          .upload(filePath, reviewImageFile);
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        // 업로드된 이미지 URL 생성
+        const { data } = supabase.storage
+          .from('images')
+          .getPublicUrl(filePath);
+
+        reviewImageUrl = data.publicUrl;
+      } else if (userReview?.review_image_url && reviewImagePreview) {
+        // 기존 이미지 유지
+        reviewImageUrl = userReview.review_image_url;
+      }
+
+      if (userHasReviewed) {
+        // 리뷰 업데이트
+        const { error } = await supabase
+          .from('product_reviews')
+          .update({
+            rating: reviewForm.rating,
+            review_text: reviewForm.review_text,
+            review_image_url: reviewImageUrl,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userReview!.id);
+
+        if (error) throw error;
+      } else {
+        // 새 리뷰 추가
+        const { error } = await supabase
+          .from('product_reviews')
+          .insert([
+            {
+              product_id: productId,
+              user_id: user.id,
+              rating: reviewForm.rating,
+              review_text: reviewForm.review_text,
+              review_image_url: reviewImageUrl,
+              is_verified_purchase: false // 구매 여부 확인 로직 추가 필요
+            }
+          ]);
+
+        if (error) throw error;
+      }
+
+      // 상태 업데이트를 위해 리뷰 다시 로드
+      await refreshReviews();
+
+      // 리뷰 폼 초기화
+      setReviewForm({
+        rating: 5,
+        review_text: '',
+      });
+      setReviewImageFile(null);
+      setReviewImagePreview(null);
+      setShowReviewForm(false);
+      
+      toast.success(userHasReviewed ? '리뷰가 수정되었습니다.' : '리뷰가 등록되었습니다.');
+    } catch (error: any) {
+      console.error('리뷰 저장 중 오류 발생:', error);
+      toast.error('리뷰를 저장하는 중 오류가 발생했습니다.');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }, [user, productId, reviewForm, reviewImageFile, userHasReviewed, userReview, refreshReviews]);
+  
+  // 리뷰 삭제 함수 추가
+  const handleDeleteReview = useCallback(async () => {
+    if (!user || !userReview) return;
+    
+    if (!confirm('정말로 이 리뷰를 삭제하시겠습니까?')) return;
+    
+    try {
+      // 리뷰 이미지가 있으면 삭제
+      if (userReview.review_image_url) {
+        try {
+          const imagePath = extractPathFromUrl(userReview.review_image_url);
+          if (imagePath) {
+            await supabase.storage
+              .from('images')
+              .remove([imagePath]);
+          }
+        } catch (error) {
+          console.error('리뷰 이미지 삭제 중 오류:', error);
+          // 이미지 삭제에 실패해도 리뷰는 삭제 진행
+        }
+      }
+      
+      // 리뷰 삭제
+      const { error } = await supabase
+        .from('product_reviews')
+        .delete()
+        .eq('id', userReview.id);
+        
+      if (error) throw error;
+      
+      // 상태 업데이트를 위해 리뷰 다시 로드
+      await refreshReviews();
+      
+      toast.success('리뷰가 삭제되었습니다.');
+    } catch (error: any) {
+      console.error('리뷰 삭제 중 오류 발생:', error);
+      toast.error('리뷰를 삭제하는 중 오류가 발생했습니다.');
+    }
+  }, [user, userReview, refreshReviews]);
+  
+  // 리뷰 상태 관리 함수 메모이제이션
+  const handleReviewChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setReviewForm(prev => ({
+      ...prev,
+      [name]: name === 'rating' ? parseInt(value) : value
+    }));
+  }, []);
+  
+  // 이미지 선택 함수 메모이제이션
+  const handleImageSelect = useCallback((imageUrl: string) => {
+    setSelectedImage(imageUrl);
+  }, []);
+  
+  // 이미지 모달 토글 함수
+  const toggleImageModal = useCallback((show: boolean, image?: string) => {
+    if (image) {
+      setSelectedImage(image);
+    }
+    setShowImageModal(show);
+  }, []);
+  
+  // 수량 변경 함수 최적화
+  const handleQuantityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      // 재고보다 많이 선택하지 못하도록 제한
+      const maxQuantity = product?.stock || 1;
+      setQuantity(Math.min(value, maxQuantity));
+    }
+  }, [product?.stock]);
+  
+  // 장바구니 추가 함수 최적화
+  const handleAddToCart = useCallback(async () => {
+    if (!user) {
+      alert('로그인이 필요한 기능입니다.');
+      return;
+    }
+
+    if (!product || !product.is_available || product.stock <= 0) {
+      alert('품절된 상품은 장바구니에 담을 수 없습니다.');
+      return;
+    }
+
+    try {
+      // 이미 장바구니에 있는지 확인
+      const { data: existingCartItem, error: checkError } = await supabase
+        .from('cart_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingCartItem) {
+        // 이미 장바구니에 있으면 수량 업데이트
+        const newQuantity = Math.min(existingCartItem.quantity + quantity, product.stock);
+        
+        const { error: updateError } = await supabase
+          .from('cart_items')
+          .update({ quantity: newQuantity })
+          .eq('id', existingCartItem.id);
+
+        if (updateError) throw updateError;
+        
+        alert(`${product.product_name} 상품이 장바구니에 추가되었습니다. (총 ${newQuantity}개)`);
+      } else {
+        // 새 상품 추가
+        const { error: insertError } = await supabase
+          .from('cart_items')
+          .insert([
+            {
+              user_id: user.id,
+              product_id: productId,
+              quantity: quantity
+            }
+          ]);
+
+        if (insertError) throw insertError;
+        
+        alert(`${product.product_name} ${quantity}개를 장바구니에 추가했습니다.`);
+      }
+    } catch (error: any) {
+      console.error('장바구니에 추가하는 중 오류가 발생했습니다:', error);
+      alert('장바구니에 추가하는 중 오류가 발생했습니다.');
+    }
+  }, [user, product, productId, quantity]);
+  
+  // 관심 상품 토글 함수 최적화
+  const toggleFavorite = useCallback(async () => {
+    if (!user) {
+      alert('로그인이 필요한 기능입니다.');
+      return;
+    }
+
+    try {
+      if (isFavorite) {
+        // 관심 상품 삭제 - 오류가 발생해도 UI는 업데이트
+        try {
+          const { error } = await supabase
+            .from('product_favorites')
+            .delete()
+            .eq('product_id', productId)
+            .eq('user_id', user.id);
+
+          if (error) {
+            console.error('관심 상품 삭제 오류:', error);
+            // 오류 발생해도 UI 업데이트는 진행
+          }
+        } catch (error) {
+          console.error('관심 상품 삭제 중 예외 발생:', error);
+        }
+        
+        // UI 업데이트
+        setIsFavorite(false);
+        decrementFavoriteCount();
+      } else {
+        // 관심 상품 추가 - 오류가 발생해도 UI는 업데이트
+        try {
+          const { error } = await supabase
+            .from('product_favorites')
+            .insert([
+              { product_id: productId, user_id: user.id }
+            ]);
+
+          if (error) {
+            console.error('관심 상품 추가 오류:', error);
+            // 오류 발생해도 UI 업데이트는 진행
+          }
+        } catch (error) {
+          console.error('관심 상품 추가 중 예외 발생:', error);
+        }
+        
+        // UI 업데이트
+        setIsFavorite(true);
+        incrementFavoriteCount();
+      }
+    } catch (error: any) {
+      console.error('관심 상품 처리 중 오류 발생:', error);
+    }
+  }, [user, isFavorite, productId, decrementFavoriteCount, incrementFavoriteCount]);
+  
+  // 리뷰 이미지 변경 처리 함수 최적화
+  const handleReviewImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setReviewImageFile(file);
+      
+      // 이미지 미리보기 생성
+      const reader = new FileReader();
+      reader.addEventListener('load', function() {
+        const result = reader.result;
+        if (result && typeof result === 'string') {
+          setReviewImagePreview(result);
+        }
+      });
+      reader.readAsDataURL(file);
+    }
+  }, []);
+  
+  // 리뷰 이미지 제거 함수 최적화
+  const handleRemoveReviewImage = useCallback(() => {
+    setReviewImageFile(null);
+    setReviewImagePreview(null);
+  }, []);
+
+  // 리뷰 폼 표시/숨김 처리 최적화
+  const toggleReviewForm = useCallback((show: boolean) => {
+    setShowReviewForm(show);
+  }, []);
+  
+  // 내 리뷰 편집 시작 함수
+  const startEditMyReview = useCallback(() => {
+    if (userReview) {
+      setReviewForm({
+        rating: userReview.rating,
+        review_text: userReview.review_text,
+      });
+      
+      if (userReview.review_image_url) {
+        setReviewImagePreview(userReview.review_image_url);
+      }
+      
+      toggleReviewForm(true);
+    }
+  }, [userReview, toggleReviewForm]);
+  
+  // useEffect 의존성 배열 정리
   useEffect(() => {
     // 최근 본 상품 목록을 로컬 스토리지에서 가져오거나 초기화
     const getRecentlyViewedFromLocalStorage = () => {
@@ -403,94 +822,13 @@ export default function ProductDetailPage() {
     }
   }, [storeId, productId, product]);
 
-  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value);
-    if (!isNaN(value) && value > 0) {
-      // 재고보다 많이 선택하지 못하도록 제한
-      const maxQuantity = product?.stock || 1;
-      setQuantity(Math.min(value, maxQuantity));
-    }
-  };
-
-  const handleAddToCart = async () => {
-    if (!user) {
-      alert('로그인이 필요한 기능입니다.');
-      return;
-    }
-
-    if (!product || !product.is_available || product.stock <= 0) {
-      alert('품절된 상품은 장바구니에 담을 수 없습니다.');
-      return;
-    }
-
+  const handleDeleteImage = async (imageUrl: string) => {
     try {
-      // 이미 장바구니에 있는지 확인
-      const { data: existingCartItem, error: checkError } = await supabase
-        .from('cart_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('product_id', productId)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-
-      if (existingCartItem) {
-        // 이미 장바구니에 있으면 수량 업데이트
-        const newQuantity = Math.min(existingCartItem.quantity + quantity, product.stock);
-        
-        const { error: updateError } = await supabase
-          .from('cart_items')
-          .update({ quantity: newQuantity })
-          .eq('id', existingCartItem.id);
-
-        if (updateError) throw updateError;
-        
-        alert(`${product.product_name} 상품이 장바구니에 추가되었습니다. (총 ${newQuantity}개)`);
-      } else {
-        // 새 상품 추가
-        const { error: insertError } = await supabase
-          .from('cart_items')
-          .insert([
-            {
-              user_id: user.id,
-              product_id: productId,
-              quantity: quantity
-            }
-          ]);
-
-        if (insertError) throw insertError;
-        
-        alert(`${product.product_name} ${quantity}개를 장바구니에 추가했습니다.`);
+      const filePath = extractPathFromUrl(imageUrl);
+      if (!filePath) {
+        toast.error('이미지 경로를 추출할 수 없습니다.');
+        return;
       }
-    } catch (error: any) {
-      console.error('장바구니에 추가하는 중 오류가 발생했습니다:', error);
-      alert('장바구니에 추가하는 중 오류가 발생했습니다.');
-    }
-  };
-
-  // 이미지 URL에서 파일 경로 추출하는 함수
-  const extractFilePathFromUrl = (url: string | null): string | null => {
-    if (!url) return null;
-    
-    try {
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      return pathParts[pathParts.length - 1];
-    } catch (error) {
-      console.error('URL 파싱 오류:', error);
-      return null;
-    }
-  };
-
-  // 제품 이미지 삭제 함수
-  const deleteProductImage = async (imageUrl: string | null): Promise<void> => {
-    if (!imageUrl) return;
-    
-    try {
-      const filePath = extractFilePathFromUrl(imageUrl);
-      if (!filePath) return;
-      
-      console.log('제품 이미지 삭제 시도:', filePath);
       
       const { error } = await supabase.storage
         .from('images')
@@ -498,15 +836,21 @@ export default function ProductDetailPage() {
         
       if (error) {
         console.error('이미지 삭제 오류:', error);
-      } else {
-        console.log('이미지 삭제 성공');
+        toast.error('이미지 삭제 중 오류가 발생했습니다.');
+        return;
       }
+      
+      toast.success('이미지가 삭제되었습니다.');
+      // 이미지 삭제 후 UI 업데이트
+      setProductImages(prevImages => 
+        prevImages.filter(img => img.url !== imageUrl)
+      );
     } catch (error) {
-      console.error('이미지 삭제 중 오류 발생:', error);
+      console.error('이미지 삭제 처리 중 오류:', error);
+      toast.error('오류가 발생했습니다.');
     }
   };
 
-  // 제품 삭제 함수
   const handleDeleteProduct = async () => {
     if (!product || !isOwner) return;
     
@@ -524,7 +868,7 @@ export default function ProductDetailPage() {
       
       // 제품 이미지 삭제
       if (product.product_image_url) {
-        await deleteProductImage(product.product_image_url);
+        await handleDeleteImage(product.product_image_url);
       }
       
       // 삭제 성공 후 상점 페이지로 이동
@@ -539,262 +883,18 @@ export default function ProductDetailPage() {
     }
   };
 
-  // 관심 상품 토글 함수
-  const toggleFavorite = async () => {
-    if (!user) {
-      alert('로그인이 필요한 기능입니다.');
-      return;
+  // 이미지 스크롤 핸들러 수정 (기존 onScroll 이벤트 핸들러를 대체)
+  const handleImageScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    
+    // 스크롤 위치에 따라 버튼 표시/숨김 처리
+    if (container.scrollLeft <= 10) {
+      // 왼쪽 끝에 도달
+    } else if (container.scrollLeft >= maxScrollLeft - 10) {
+      // 오른쪽 끝에 도달
     }
-
-    try {
-      if (isFavorite) {
-        // 관심 상품 삭제 - 오류가 발생해도 UI는 업데이트
-        try {
-          const { error } = await supabase
-            .from('product_favorites')
-            .delete()
-            .eq('product_id', productId)
-            .eq('user_id', user.id);
-
-          if (error) {
-            console.error('관심 상품 삭제 오류:', error);
-            // 오류 발생해도 UI 업데이트는 진행
-          }
-        } catch (error) {
-          console.error('관심 상품 삭제 중 예외 발생:', error);
-        }
-        
-        // UI 업데이트
-        setIsFavorite(false);
-        setFavoriteCount(prev => Math.max(0, prev - 1));
-      } else {
-        // 관심 상품 추가 - 오류가 발생해도 UI는 업데이트
-        try {
-          const { error } = await supabase
-            .from('product_favorites')
-            .insert([
-              { product_id: productId, user_id: user.id }
-            ]);
-
-          if (error) {
-            console.error('관심 상품 추가 오류:', error);
-            // 오류 발생해도 UI 업데이트는 진행
-          }
-        } catch (error) {
-          console.error('관심 상품 추가 중 예외 발생:', error);
-        }
-        
-        // UI 업데이트
-        setIsFavorite(true);
-        setFavoriteCount(prev => prev + 1);
-      }
-    } catch (error: any) {
-      console.error('관심 상품 처리 중 오류 발생:', error);
-    }
-  };
-
-  // 리뷰 입력 핸들러
-  const handleReviewChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setReviewForm({
-      ...reviewForm,
-      [name]: name === 'rating' ? parseInt(value) : value
-    });
-  };
-
-  // 리뷰 이미지 변경 핸들러
-  const handleReviewImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setReviewImageFile(file);
-      
-      // 이미지 미리보기 생성
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target) {
-          setReviewImagePreview(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  // 리뷰 이미지 제거 핸들러
-  const handleRemoveReviewImage = () => {
-    setReviewImageFile(null);
-    setReviewImagePreview(null);
-  };
-
-  // 리뷰 제출 핸들러
-  const handleReviewSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user) {
-      alert('리뷰를 작성하려면 로그인이 필요합니다.');
-      return;
-    }
-    
-    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
-      alert('별점은 1~5점 사이로 선택해주세요.');
-      return;
-    }
-    
-    setReviewSubmitting(true);
-    
-    try {
-      let review_image_url = null;
-      
-      // 이미지 파일이 있으면 스토리지에 업로드
-      if (reviewImageFile) {
-        try {
-          // 이미지 파일 크기 확인 (10MB 제한)
-          if (reviewImageFile.size > 10 * 1024 * 1024) {
-            throw new Error('이미지 크기는 10MB 이하여야 합니다.');
-          }
-          
-          // 파일 확장자 확인
-          const fileExt = reviewImageFile.name.split('.').pop()?.toLowerCase();
-          if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
-            throw new Error('지원되는 이미지 형식은 JPG, PNG, GIF, WEBP입니다.');
-          }
-          
-          // 파일명 생성
-          const fileName = `reviews/${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
-          
-          // 이미지 업로드
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('images')
-            .upload(fileName, reviewImageFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
-            
-          if (uploadError) throw uploadError;
-          
-          // 업로드된 이미지의 공개 URL 가져오기
-          const { data } = supabase.storage
-            .from('images')
-            .getPublicUrl(fileName);
-            
-          review_image_url = data.publicUrl;
-        } catch (imageError: any) {
-          console.error('이미지 처리 중 오류:', imageError);
-          const errorMessage = imageError.message || '이미지 업로드에 실패했습니다.';
-          
-          // 이미지 없이 계속 진행할지 확인
-          const continueWithoutImage = confirm(`${errorMessage}\n\n이미지 없이 리뷰를 등록하시겠습니까?`);
-          if (!continueWithoutImage) {
-            setReviewSubmitting(false);
-            return;
-          }
-        }
-      }
-      
-      // 리뷰 데이터 준비
-      const reviewData = {
-        product_id: productId,
-        user_id: user.id,
-        rating: reviewForm.rating,
-        review_text: reviewForm.review_text,
-        review_image_url,
-        is_verified_purchase: false, // 구매 확인은 향후 구현
-      };
-      
-      if (userHasReviewed && userReview) {
-        // 기존 리뷰 수정
-        const { error } = await supabase
-          .from('product_reviews')
-          .update(reviewData)
-          .eq('id', userReview.id);
-          
-        if (error) throw error;
-        
-        // 이전 이미지가 있고 새 이미지가 다르면 이전 이미지 삭제
-        if (userReview.review_image_url && userReview.review_image_url !== review_image_url) {
-          await deleteProductImage(userReview.review_image_url);
-        }
-        
-        alert('리뷰가 성공적으로 수정되었습니다.');
-      } else {
-        // 새 리뷰 등록
-        const { error } = await supabase
-          .from('product_reviews')
-          .insert([reviewData]);
-          
-        if (error) throw error;
-        
-        alert('리뷰가 성공적으로 등록되었습니다.');
-      }
-      
-      // 리뷰 폼 초기화
-      setReviewForm({
-        rating: 5,
-        review_text: '',
-      });
-      setReviewImageFile(null);
-      setReviewImagePreview(null);
-      
-      // 페이지 새로고침하여 리뷰 목록 업데이트
-      window.location.reload();
-    } catch (error: any) {
-      console.error('리뷰 저장 중 오류 발생:', error);
-      alert(`리뷰 저장 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
-    } finally {
-      setReviewSubmitting(false);
-    }
-  };
-
-  // 리뷰 삭제 핸들러
-  const handleDeleteReview = async () => {
-    if (!user || !userReview) return;
-    
-    if (!confirm('정말 리뷰를 삭제하시겠습니까?')) return;
-    
-    try {
-      // 리뷰 삭제
-      const { error } = await supabase
-        .from('product_reviews')
-        .delete()
-        .eq('id', userReview.id)
-        .eq('user_id', user.id);
-        
-      if (error) throw error;
-      
-      // 리뷰 이미지 삭제
-      if (userReview.review_image_url) {
-        await deleteProductImage(userReview.review_image_url);
-      }
-      
-      alert('리뷰가 성공적으로 삭제되었습니다.');
-      
-      // 페이지 새로고침하여 리뷰 목록 업데이트
-      window.location.reload();
-    } catch (error: any) {
-      console.error('리뷰 삭제 중 오류 발생:', error);
-      alert(`리뷰 삭제 중 오류가 발생했습니다: ${error.message || '알 수 없는 오류'}`);
-    }
-  };
-
-  const handleShowReviewForm = () => {
-    setShowReviewForm(true);
-  };
-
-  const handleEditMyReview = () => {
-    setShowReviewForm(true);
-  };
-
-  const handleDeleteMyReview = () => {
-    if (!user || !userReview) return;
-    
-    if (!confirm('정말 리뷰를 삭제하시겠습니까?')) return;
-    
-    handleDeleteReview();
-  };
-
-  // 이미지 변경 함수
-  const handleImageSelect = (imageUrl: string) => {
-    setSelectedImage(imageUrl);
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -929,23 +1029,7 @@ export default function ProductDetailPage() {
             <div 
               className="md:w-1/2 md:sticky md:top-16 md:self-start md:max-h-[calc(100vh-120px)] md:overflow-y-auto md:hide-scrollbar" 
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              onScroll={throttle((e) => {
-                // 스크롤 이벤트 발생 시 방향 감지
-                const target = e.currentTarget;
-                const currentScrollPos = target.scrollTop;
-                
-                // 스크롤 방향에 따라 네비게이션 바를 표시하거나 숨김
-                if (currentScrollPos > prevScrollPos) {
-                  // 아래로 스크롤 - 네비게이션 바 숨김
-                  emitNavbarEvent(true);
-                } else {
-                  // 위로 스크롤 - 네비게이션 바 표시
-                  emitNavbarEvent(false);
-                }
-                
-                // 현재 스크롤 위치 저장
-                prevScrollPos = currentScrollPos;
-              }, 50)}
+              onScroll={handleImageScroll}
             >
               {/* 모바일 뷰 수평 슬라이드 */}
               <div className="md:hidden w-full overflow-x-auto hide-scrollbar py-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -959,7 +1043,7 @@ export default function ProductDetailPage() {
                         className="w-full h-full object-contain p-4 product-image"
                       />
                       <button
-                        onClick={() => setShowImageModal(true)}
+                        onClick={() => toggleImageModal(true, product.product_image_url || undefined)}
                         className="absolute inset-0 flex items-center justify-center bg-transparent"
                         aria-label="이미지 확대"
                       />
@@ -983,7 +1067,7 @@ export default function ProductDetailPage() {
                         className="w-full h-full object-contain p-4 product-image"
                       />
                       <button
-                        onClick={() => {setSelectedImage(image.url); setShowImageModal(true);}}
+                        onClick={() => toggleImageModal(true, image.url)}
                         className="absolute inset-0 flex items-center justify-center bg-transparent"
                         aria-label="이미지 확대"
                       />
@@ -1015,7 +1099,7 @@ export default function ProductDetailPage() {
                       className="w-full h-full object-contain p-4 product-image"
                     />
                     <button
-                      onClick={() => setShowImageModal(true)}
+                      onClick={() => toggleImageModal(true, product.product_image_url || undefined)}
                       className="absolute inset-0 flex items-center justify-center bg-transparent"
                       aria-label="이미지 확대"
                     />
@@ -1039,7 +1123,7 @@ export default function ProductDetailPage() {
                       className="w-full h-full object-contain p-4 product-image"
                     />
                     <button
-                      onClick={() => {setSelectedImage(image.url); setShowImageModal(true);}}
+                      onClick={() => toggleImageModal(true, image.url)}
                       className="absolute inset-0 flex items-center justify-center bg-transparent"
                       aria-label="이미지 확대"
                     />
@@ -1183,7 +1267,7 @@ export default function ProductDetailPage() {
                       <div id="shipping-info" className="accordion-content">
                         <div className="accordion-inner space-y-2 text-sm text-gray-600">
                           {product && product.shipping_info ? (
-                            <div dangerouslySetInnerHTML={{ __html: product.shipping_info.replace(/\n/g, '<br/>') }} />
+                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shipping_info.replace(/\n/g, '<br/>')) }} />
                           ) : (
                             <>
                               <p>• 평일 오후 2시 이전 주문 시 당일 출고</p>
@@ -1228,7 +1312,7 @@ export default function ProductDetailPage() {
                       <div id="return-policy" className="accordion-content">
                         <div className="accordion-inner space-y-2 text-sm text-gray-600">
                           {product && product.return_policy ? (
-                            <div dangerouslySetInnerHTML={{ __html: product.return_policy.replace(/\n/g, '<br/>') }} />
+                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.return_policy.replace(/\n/g, '<br/>')) }} />
                           ) : (
                             <>
                               <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
@@ -1256,7 +1340,7 @@ export default function ProductDetailPage() {
                           min="1"
                           max={product.stock}
                           value={quantity}
-                          onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                          onChange={handleQuantityChange}
                           className="w-12 text-center border-x border-gray-300 py-2 focus:outline-none text-sm"
                         />
                         <button 
@@ -1368,7 +1452,7 @@ export default function ProductDetailPage() {
         <div className="fixed inset-0 bg-white z-50 p-4 md:p-8 overflow-auto">
           <button
             className="absolute top-6 right-6 p-2 text-gray-900 hover:text-gray-600 z-10"
-            onClick={() => setShowImageModal(false)}
+            onClick={() => toggleImageModal(false)}
           >
             <X className="w-6 h-6" />
           </button>
@@ -1413,6 +1497,228 @@ export default function ProductDetailPage() {
       {/* 추가 제품 배너 섹션 */}
       {!loading && product && store && (
         <div className="w-full bg-white py-10 mt-12 border-t border-gray-100">
+          {/* 리뷰 섹션 추가 */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
+            <div className="border-b border-gray-200 pb-4 mb-8">
+              <h2 className="text-lg uppercase tracking-widest text-gray-900 font-light">
+                고객 리뷰
+              </h2>
+            </div>
+            
+            {reviewLoading ? (
+              <div className="py-8 flex justify-center">
+                <p className="text-gray-500">리뷰 로딩 중...</p>
+              </div>
+            ) : (
+              <div>
+                {/* 리뷰 요약 */}
+                <div className="mb-8">
+                  <div className="flex items-center mb-4">
+                    <div className="flex items-center">
+                      {Array.from({ length: 5 }).map((_, index) => (
+                        <svg 
+                          key={index}
+                          className={`w-5 h-5 ${index < Math.round(product.average_rating || 0) ? 'text-yellow-400' : 'text-gray-300'}`}
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                      <span className="ml-2 text-gray-900 font-medium">
+                        {product.average_rating?.toFixed(1) || '0.0'}
+                      </span>
+                    </div>
+                    <span className="mx-2 text-gray-500">•</span>
+                    <span className="text-gray-500">{reviews.length}개 리뷰</span>
+                  </div>
+                </div>
+                
+                {/* 리뷰 작성 버튼 */}
+                {user && !userHasReviewed && (
+                  <div className="mb-8">
+                    <button 
+                      onClick={() => toggleReviewForm(true)}
+                      className="px-4 py-2 border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors rounded-md"
+                    >
+                      리뷰 작성하기
+                    </button>
+                  </div>
+                )}
+                
+                {/* 리뷰 폼 */}
+                {user && showReviewForm && (
+                  <div className="mb-12 p-6 border border-gray-200 rounded-md">
+                    <h3 className="text-base font-medium mb-4">
+                      {userHasReviewed ? '리뷰 수정하기' : '리뷰 작성하기'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmitReview} className="space-y-6">
+                      {/* 별점 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">별점</label>
+                        <div className="flex items-center space-x-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <label key={star} className="cursor-pointer">
+                              <input
+                                type="radio"
+                                name="rating"
+                                value={star}
+                                checked={reviewForm.rating === star}
+                                onChange={handleReviewChange}
+                                className="sr-only"
+                              />
+                              <svg 
+                                className={`w-8 h-8 ${reviewForm.rating >= star ? 'text-yellow-400' : 'text-gray-300'} hover:text-yellow-400 transition-colors`}
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                              </svg>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* 리뷰 내용 */}
+                      <div>
+                        <label htmlFor="review_text" className="block text-sm font-medium text-gray-700 mb-2">
+                          리뷰 내용
+                        </label>
+                        <textarea
+                          id="review_text"
+                          name="review_text"
+                          rows={4}
+                          value={reviewForm.review_text}
+                          onChange={handleReviewChange}
+                          placeholder="제품에 대한 평가를 작성해주세요"
+                          className="w-full border border-gray-300 rounded-md py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        ></textarea>
+                      </div>
+                      
+                      {/* 이미지 업로드 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">이미지 추가 (선택사항)</label>
+                        <div className="flex items-center space-x-4">
+                          <label className="cursor-pointer px-4 py-2 border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors rounded-md">
+                            {reviewImagePreview ? '이미지 변경' : '이미지 선택'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleReviewImageChange}
+                              className="hidden"
+                            />
+                          </label>
+                          
+                          {reviewImagePreview && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveReviewImage}
+                              className="text-red-600 text-sm hover:text-red-700"
+                            >
+                              이미지 삭제
+                            </button>
+                          )}
+                        </div>
+                        
+                        {reviewImagePreview && (
+                          <div className="mt-3 relative w-24 h-24 border border-gray-200 rounded overflow-hidden">
+                            <img
+                              src={reviewImagePreview}
+                              alt="리뷰 이미지 미리보기"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 버튼 그룹 */}
+                      <div className="flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleReviewForm(false)}
+                          className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors"
+                        >
+                          취소
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={reviewSubmitting}
+                          className="px-4 py-2 bg-black text-white text-sm hover:bg-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {reviewSubmitting ? '처리 중...' : (userHasReviewed ? '수정하기' : '등록하기')}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+                
+                {/* 리뷰 목록 */}
+                <div className="space-y-8">
+                  {reviews.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">아직 작성된 리뷰가 없습니다.</p>
+                  ) : (
+                    reviews.map((review) => (
+                      <div key={review.id} className="pb-8 border-b border-gray-100">
+                        <div className="flex justify-between mb-2">
+                          <div className="font-medium">{review.user_name || '익명 사용자'}</div>
+                          <div className="text-sm text-gray-500">
+                            {new Date(review.created_at).toLocaleDateString('ko-KR')}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center mb-3">
+                          {Array.from({ length: 5 }).map((_, index) => (
+                            <svg 
+                              key={index}
+                              className={`w-4 h-4 ${index < review.rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                          ))}
+                        </div>
+                        
+                        <div className="text-gray-700 mb-4 whitespace-pre-line">{review.review_text}</div>
+                        
+                        {review.review_image_url && (
+                          <div className="mb-4">
+                            <img
+                              src={review.review_image_url}
+                              alt="리뷰 이미지"
+                              className="max-w-xs max-h-48 object-contain border border-gray-100 rounded"
+                              onClick={() => review.review_image_url && toggleImageModal(true, review.review_image_url)}
+                            />
+                          </div>
+                        )}
+                        
+                        {/* 리뷰 작성자만 수정/삭제 가능 */}
+                        {user && user.id === review.user_id && (
+                          <div className="flex space-x-4 mt-2">
+                            <button
+                              onClick={startEditMyReview}
+                              className="text-sm text-gray-500 hover:text-black transition-colors"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={handleDeleteReview}
+                              className="text-sm text-red-500 hover:text-red-600 transition-colors"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* 같은 상점의 다른 제품 */}
             {storeProducts.length > 0 && (

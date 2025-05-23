@@ -1,0 +1,5 @@
+이 폴더는 이미지 파일을 저장하기 위한 폴더입니다.
+다음 이미지 파일을 여기에 배치하세요:
+1. mainAD.jpg - 메인 광고 이미지
+2. brand_placeholder.png - 브랜드 플레이스홀더 이미지
+3. product_placeholder.jpg - 제품 플레이스홀더 이미지 

@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProductForm from '@/components/ProductForm';
 import { X } from 'lucide-react';
+import { extractPathFromUrl, moveImage } from '@/lib/migration';
+import { toast } from 'react-hot-toast';
+import DOMPurify from 'dompurify';
+import logger from '@/lib/logger';
 
 // 네비게이션 바 컨트롤을 위한 사용자 정의 이벤트 추가
 const emitNavbarEvent = (hide: boolean) => {
@@ -128,12 +132,12 @@ export default function EditProductPage() {
 • 환불 방법: 결제 수단에 따라 원금액 환불`;
 
   // 아코디언 열기/닫기 함수
-  const toggleAccordion = (id: string) => {
+  const toggleAccordion = useCallback((id: string) => {
     setActiveAccordion(activeAccordion === id ? null : id);
-  };
+  }, [activeAccordion]);
   
   // 인라인 편집 시작 함수
-  const startEditing = (field: string, value: string | number, accordionId?: string) => {
+  const startEditing = useCallback((field: string, value: string | number, accordionId?: string) => {
     // 배송 정보와 반품 정책은 편집 불가능하도록 처리
     if (field === 'shipping_info' || field === 'return_policy') {
       alert('배송 및 반품 정책은 고정 정책으로 개별 편집이 불가능합니다.');
@@ -151,15 +155,15 @@ export default function EditProductPage() {
     } else {
       setEditValue(value || '');
     }
-  };
+  }, [setActiveAccordion]);
   
   // 인라인 편집 취소 함수
-  const cancelEditing = () => {
+  const cancelEditing = useCallback(() => {
     setEditingField(null);
-  };
+  }, []);
   
   // 인라인 편집 저장 함수
-  const saveEditing = async (field: string) => {
+  const saveEditing = useCallback(async (field: string) => {
     if (!product) return;
     
     let value: string | number | boolean = editValue;
@@ -173,7 +177,7 @@ export default function EditProductPage() {
         throw new Error('텍스트가 너무 깁니다. 10,000자 이내로 작성해주세요.');
       }
       
-      console.log(`${field} 수정 시작`);
+      logger.debug(`${field} 수정 시작`);
       
       const { data, error } = await supabase
         .from('products')
@@ -183,46 +187,26 @@ export default function EditProductPage() {
       // 오류가 있고, 그 오류가 실제로 내용이 있는 경우만 예외 처리
       // 빈 객체 {} 는 사실상 오류가 아닌 것으로 간주
       if (error && typeof error === 'object' && Object.keys(error).length > 0 && error.message) {
-        console.error('실제 오류 내용:', JSON.stringify(error));
+        logger.error('실제 오류 내용:', JSON.stringify(error));
         throw new Error(error.message || '알 수 없는 오류');
       }
       
       // 이 지점에 도달하면 성공으로 처리 (빈 오류 객체도 성공으로 간주)
-      console.log(`${field} 업데이트 성공`);
+      logger.debug(`${field} 업데이트 성공`);
       
-      // 상태 업데이트
-      setProduct({
-        ...product,
-        [field]: value
-      });
-      
-      setEditingField(null);
-      
-      // 성공 메시지
-      const fieldNames: Record<string, string> = {
-        shipping_info: '배송 정보',
-        return_policy: '반품 정책',
-        material: '재질/소재 정보',
-        product_name: '제품명',
-        product_description: '제품 설명',
-        price: '가격',
-        stock: '재고'
-      };
-      
-      alert(`${fieldNames[field] || field} 정보가 저장되었습니다.`);
-      
+      // ... existing code ...
     } catch (error: any) {
       // 오류 객체를 문자열로 직접 출력하지 않고 메시지만 추출
       const errorMessage = error.message || '알 수 없는 오류가 발생했습니다';
-      console.error(`${field} 수정 중 오류 발생:`, errorMessage);
+      logger.error(`${field} 수정 중 오류 발생:`, errorMessage);
       alert(`${field} 수정 중 오류가 발생했습니다: ${errorMessage}`);
     }
-  };
+  }, [product, editValue, editNumberValue, productId]);
 
   // 템플릿 적용 함수
-  const applyTemplate = (templateContent: string) => {
+  const applyTemplate = useCallback((templateContent: string) => {
     setEditValue(templateContent);
-  };
+  }, []);
 
   // useEffect 이전에 추가할 상태 관리 코드
   const [shippingTemplates, setShippingTemplates] = useState<PolicyTemplate[]>([]);
@@ -360,41 +344,30 @@ export default function EditProductPage() {
     fetchPolicyTemplates();
   }, [storeId, productId, user, router]);
 
-  // 이미지 URL에서 파일 경로 추출하는 함수
-  const extractFilePathFromUrl = (url: string | null): string | null => {
-    if (!url) return null;
-    
-    try {
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      return pathParts[pathParts.length - 1];
-    } catch (error) {
-      console.error('URL 파싱 오류:', error);
-      return null;
-    }
-  };
-
   // 제품 이미지 삭제 함수
-  const deleteProductImage = async (imageUrl: string | null): Promise<void> => {
+  const deleteImage = async (imageUrl: string | null): Promise<void> => {
     if (!imageUrl) return;
     
     try {
-      const filePath = extractFilePathFromUrl(imageUrl);
-      if (!filePath) return;
+      const filePath = extractPathFromUrl(imageUrl);
+      if (!filePath) {
+        logger.warn('이미지 경로를 추출할 수 없습니다:', imageUrl);
+        return;
+      }
       
-      console.log('제품 이미지 삭제 시도:', filePath);
+      logger.debug('이미지 삭제 시도:', filePath);
       
       const { error } = await supabase.storage
         .from('images')
         .remove([filePath]);
-        
+      
       if (error) {
-        console.error('이미지 삭제 오류:', error);
+        logger.error('이미지 삭제 오류:', error);
       } else {
-        console.log('이미지 삭제 성공');
+        logger.debug('이미지 삭제 성공:', filePath);
       }
     } catch (error) {
-      console.error('이미지 삭제 중 오류 발생:', error);
+      logger.error('이미지 삭제 중 오류 발생:', error);
     }
   };
 
@@ -416,7 +389,7 @@ export default function EditProductPage() {
       
       // 제품 이미지 삭제
       if (product.product_image_url) {
-        await deleteProductImage(product.product_image_url);
+        await deleteImage(product.product_image_url);
       }
       
       // 삭제 성공 후 상점 페이지로 이동
@@ -431,89 +404,123 @@ export default function EditProductPage() {
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setImageFile(file);
       
       // 이미지 미리보기 생성
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target) {
-          setImagePreview(event.target.result as string);
-          setSelectedImage(event.target.result as string);
+      reader.addEventListener('load', function() {
+        const result = reader.result;
+        if (result && typeof result === 'string') {
+          setImagePreview(result);
+          setSelectedImage(result);
         }
-      };
+      });
       reader.readAsDataURL(file);
     }
-  };
+  }, []);
 
-  const handleRemoveImage = () => {
+  const handleRemoveImage = useCallback(() => {
     setImageFile(null);
     setImagePreview(null);
     setSelectedImage(null);
-  };
+  }, []);
 
   // 추가 이미지 업로드 함수
-  const handleAdditionalImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdditionalImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
       // 이미지 미리보기 생성
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target) {
-          setAdditionalImages([
-            ...additionalImages,
-            { file, preview: event.target.result as string }
+      reader.addEventListener('load', function() {
+        const result = reader.result;
+        if (result && typeof result === 'string') {
+          setAdditionalImages(prev => [
+            ...prev,
+            { file, preview: result }
           ]);
         }
-      };
+      });
       reader.readAsDataURL(file);
     }
-  };
+  }, []);
 
   // 추가 이미지 제거 함수
-  const handleRemoveAdditionalImage = (index: number) => {
+  const handleRemoveAdditionalImage = useCallback((index: number) => {
     setAdditionalImages(additionalImages.filter((_, i) => i !== index));
-  };
+  }, [additionalImages]);
   
   // 기존 이미지 제거 함수
-  const handleRemoveExistingImage = async (id: string) => {
+  const handleRemoveExistingImage = useCallback(async (id: string) => {
+    const imageToRemove = existingImages.find(img => img.id === id);
+    if (!imageToRemove) return;
+    
     try {
-      const imageToRemove = existingImages.find(img => img.id === id);
-      if (!imageToRemove) return;
+      // 스토리지에서 이미지 파일 삭제
+      const filePath = extractPathFromUrl(imageToRemove.url);
+      if (filePath) {
+        await deleteImage(imageToRemove.url);
+      }
       
-      // 이미지 URL에서 파일 경로 추출
-      const filePath = extractFilePathFromUrl(imageToRemove.url);
-      
-      // DB에서 이미지 정보 삭제
-      const { error } = await supabase
+      // DB에서 이미지 레코드 삭제
+      await supabase
         .from('product_images')
         .delete()
         .eq('id', id);
         
-      if (error) throw error;
-      
-      // 스토리지에서 파일 삭제 (필요한 경우)
-      if (filePath) {
-        await supabase.storage
-          .from('images')
-          .remove([filePath]);
-      }
-      
-      // 상태 업데이트
-      setExistingImages(existingImages.filter(img => img.id !== id));
+      // UI 업데이트
+      setExistingImages(prev => prev.filter(img => img.id !== id));
+      toast.success('이미지가 삭제되었습니다.');
     } catch (error) {
       console.error('이미지 삭제 오류:', error);
-      alert('이미지를 삭제하는 중 오류가 발생했습니다.');
+      toast.error('이미지 삭제 중 오류가 발생했습니다.');
     }
-  };
+  }, [existingImages]);
 
   // 이미지 변경 함수
-  const handleImageSelect = (imageUrl: string) => {
+  const handleImageSelect = useCallback((imageUrl: string) => {
     setSelectedImage(imageUrl);
-  };
+  }, []);
+
+  // 이미지 모달 토글 함수
+  const toggleImageModal = useCallback((show: boolean) => {
+    setShowImageModal(show);
+  }, []);
+  
+  // 제품 가용성 토글 함수
+  const toggleProductAvailability = useCallback(async () => {
+    if (!product) return;
+    
+    try {
+      const newAvailability = !product.is_available;
+      
+      const { error } = await supabase
+        .from('products')
+        .update({ is_available: newAvailability })
+        .eq('id', productId);
+      
+      if (error) throw error;
+      
+      // 상태 업데이트
+      setProduct({
+        ...product,
+        is_available: newAvailability
+      });
+      
+      toast.success(`제품 상태가 ${newAvailability ? '판매 중' : '판매 중지'}으로 변경되었습니다.`);
+    } catch (error) {
+      console.error('판매 상태 수정 중 오류:', error);
+      toast.error('판매 상태 수정 중 오류가 발생했습니다.');
+    }
+  }, [product, productId]);
+  
+  // 삭제 확인 모달 토글 함수
+  const toggleDeleteConfirm = useCallback((show: boolean) => {
+    setShowDeleteConfirm(show);
+  }, []);
 
   if (loading) {
     return (
@@ -984,7 +991,7 @@ export default function EditProductPage() {
                           <div 
                             className="rich-editor text-gray-600 leading-relaxed text-sm"
                             dangerouslySetInnerHTML={{ 
-                              __html: product.product_description || '<p className="text-gray-400">제품 설명이 없습니다.</p>' 
+                              __html: DOMPurify.sanitize(product.product_description || '<p className="text-gray-400">제품 설명이 없습니다.</p>')
                             }}
                           />
                         </div>
@@ -1069,25 +1076,7 @@ export default function EditProductPage() {
                               type="checkbox" 
                               id="is-available" 
                               checked={product.is_available}
-                              onChange={() => {
-                                // 판매 상태 토글 API 호출
-                                supabase
-                                  .from('products')
-                                  .update({ is_available: !product.is_available })
-                                  .eq('id', productId)
-                                  .then(({ error }) => {
-                                    if (error) {
-                                      alert('판매 상태 수정 중 오류가 발생했습니다.');
-                                      console.error(error);
-                                    } else {
-                                      // 상태 업데이트
-                                      setProduct({
-                ...product,
-                                        is_available: !product.is_available
-                                      });
-                                    }
-                                  });
-                              }}
+                              onChange={toggleProductAvailability}
                               className="h-4 w-4 text-black focus:ring-black border-gray-300"
                             />
                             <label htmlFor="is-available" className="ml-2 text-sm">판매 중</label>
@@ -1120,7 +1109,7 @@ export default function EditProductPage() {
                     >
                       <div className="space-y-2 text-sm text-gray-600">
                         {product && product.shipping_info ? (
-                          <div dangerouslySetInnerHTML={{ __html: product.shipping_info.replace(/\n/g, '<br/>') }} />
+                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shipping_info.replace(/\n/g, '<br/>')) }} />
                         ) : (
                           <p className="text-gray-400">기본 배송 정책이 적용됩니다.</p>
                         )}
@@ -1154,7 +1143,7 @@ export default function EditProductPage() {
                     >
                       <div className="space-y-2 text-sm text-gray-600">
                         {product && product.return_policy ? (
-                          <div dangerouslySetInnerHTML={{ __html: product.return_policy.replace(/\n/g, '<br/>') }} />
+                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.return_policy.replace(/\n/g, '<br/>')) }} />
                         ) : (
                           <p className="text-gray-400">기본 반품 정책이 적용됩니다.</p>
                         )}

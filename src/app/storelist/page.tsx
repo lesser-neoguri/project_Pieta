@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import logger from '@/lib/logger';
 
 type StoreData = {
   id: string;
@@ -37,7 +38,7 @@ export default function StoreListPage() {
 
         setStores(storesData || []);
       } catch (error: any) {
-        console.error('상점 목록 로딩 중 오류 발생:', error);
+        logger.error('상점 목록 로딩 중 오류 발생:', error);
         setError('상점 목록을 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);

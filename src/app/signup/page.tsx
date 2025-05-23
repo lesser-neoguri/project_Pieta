@@ -2,19 +2,19 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useScroll } from '@/hooks/useScroll';
 
 export default function SignupPage() {
   const [isScrolled, setIsScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollPosition = window.scrollY;
-      setIsScrolled(scrollPosition > 20);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  
+  // useScroll 훅 사용
+  const { scrollY } = useScroll({
+    throttleDelay: 50,
+    threshold: 20,
+    onThresholdPass: (exceeds) => {
+      setIsScrolled(exceeds);
+    }
+  });
 
   return (
     <div className="min-h-screen bg-white">
