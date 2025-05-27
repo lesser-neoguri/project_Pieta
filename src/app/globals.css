@@ -22,9 +22,24 @@
   }
 }
 
+/* 스크롤 관성 제거 */
+html {
+  scroll-behavior: auto;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
+  -webkit-overflow-scrolling: auto;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
+/* 모든 스크롤 가능한 요소의 관성 제거 */
+* {
+  -webkit-overflow-scrolling: auto;
+  overscroll-behavior: none;
 }
 
 /* 텍스트 스타일 유틸리티 클래스 */

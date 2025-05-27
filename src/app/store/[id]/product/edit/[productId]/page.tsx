@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProductForm from '@/components/ProductForm';
+import ImageCropModal from '@/components/ImageCropModal';
 import { X } from 'lucide-react';
 import { extractPathFromUrl, moveImage } from '@/lib/migration';
 import { toast } from 'react-hot-toast';
@@ -56,6 +57,9 @@ type ProductData = {
   warranty?: string;
   shipping_info?: string;
   return_policy?: string;
+  discount_percentage?: number;
+  discounted_price?: number | null;
+  is_on_sale?: boolean;
 };
 
 // 파일 상단에 추가할 타입 정의
@@ -86,6 +90,14 @@ export default function EditProductPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // 크롭 모달 관련 상태
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string>('');
+  const [cropType, setCropType] = useState<'main' | 'additional'>('main');
+  
+  // 저장 상태 관리
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
   // 추가 이미지 관련 상태
   const [additionalImages, setAdditionalImages] = useState<{ file: File | null; preview: string; id?: string }[]>([]);
@@ -167,7 +179,7 @@ export default function EditProductPage() {
     if (!product) return;
     
     let value: string | number | boolean = editValue;
-    if (field === 'price' || field === 'stock') {
+    if (field === 'price' || field === 'stock' || field === 'discount_percentage' || field === 'discounted_price') {
       value = editNumberValue;
     }
     
@@ -342,6 +354,23 @@ export default function EditProductPage() {
     
     // 정책 템플릿 불러오기
     fetchPolicyTemplates();
+    
+    // 키보드 단축키 이벤트 리스너 추가
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        setSaveStatus('saving');
+        const event = new Event('submit', { bubbles: true, cancelable: true });
+        const form = document.querySelector('form');
+        if (form) form.dispatchEvent(event);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [storeId, productId, user, router]);
 
   // 제품 이미지 삭제 함수
@@ -407,19 +436,21 @@ export default function EditProductPage() {
   const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setImageFile(file);
       
-      // 이미지 미리보기 생성
+      // 이미지 미리보기 생성 후 크롭 모달 열기
       const reader = new FileReader();
       reader.addEventListener('load', function() {
         const result = reader.result;
         if (result && typeof result === 'string') {
-          setImagePreview(result);
-          setSelectedImage(result);
+          setCropImageSrc(result);
+          setCropType('main');
+          setShowCropModal(true);
         }
       });
       reader.readAsDataURL(file);
     }
+    // 파일 input 초기화
+    e.target.value = '';
   }, []);
 
   const handleRemoveImage = useCallback(() => {
@@ -433,19 +464,59 @@ export default function EditProductPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
+      // 이미지 미리보기 생성 후 크롭 모달 열기
+      const reader = new FileReader();
+      reader.addEventListener('load', function() {
+        const result = reader.result;
+        if (result && typeof result === 'string') {
+          setCropImageSrc(result);
+          setCropType('additional');
+          setShowCropModal(true);
+        }
+      });
+      reader.readAsDataURL(file);
+    }
+    // 파일 input 초기화
+    e.target.value = '';
+  }, []);
+
+  // 크롭 완료 핸들러
+  const handleCropComplete = useCallback((croppedImageFile: File) => {
+    if (cropType === 'main') {
+      // 메인 이미지 처리
+      setImageFile(croppedImageFile);
+      
       // 이미지 미리보기 생성
+      const reader = new FileReader();
+      reader.addEventListener('load', function() {
+        const result = reader.result;
+        if (result && typeof result === 'string') {
+          setImagePreview(result);
+          setSelectedImage(result);
+        }
+      });
+      reader.readAsDataURL(croppedImageFile);
+    } else if (cropType === 'additional') {
+      // 추가 이미지 처리
       const reader = new FileReader();
       reader.addEventListener('load', function() {
         const result = reader.result;
         if (result && typeof result === 'string') {
           setAdditionalImages(prev => [
             ...prev,
-            { file, preview: result }
+            { file: croppedImageFile, preview: result }
           ]);
         }
       });
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(croppedImageFile);
     }
+  }, [cropType]);
+
+  // 크롭 모달 닫기 핸들러
+  const handleCropModalClose = useCallback(() => {
+    setShowCropModal(false);
+    setCropImageSrc('');
+    setCropType('main');
   }, []);
 
   // 추가 이미지 제거 함수
@@ -947,7 +1018,7 @@ export default function EditProductPage() {
                     ) : (
                       <>
                         <p className="text-lg text-gray-900">
-                          {product?.price?.toLocaleString()}원
+                          정가: {product?.price?.toLocaleString()}원
                         </p>
                         <button 
                           className="absolute -right-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-500 underline"
@@ -956,6 +1027,136 @@ export default function EditProductPage() {
                           수정
                         </button>
                       </>
+                    )}
+                  </div>
+
+                  {/* 할인 설정 */}
+                  <div className="border border-gray-200 rounded-lg p-4 mb-8">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-medium">할인 설정</h4>
+                      <div className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          id="is-on-sale" 
+                          checked={product.is_on_sale || false}
+                          onChange={async (e) => {
+                            const isOnSale = e.target.checked;
+                            try {
+                              const { error } = await supabase
+                                .from('products')
+                                .update({ 
+                                  is_on_sale: isOnSale,
+                                  ...(isOnSale ? {} : { discount_percentage: 0, discounted_price: null })
+                                })
+                                .eq('id', productId);
+                              
+                              if (error) throw error;
+                              
+                              setProduct(prev => prev ? { 
+                                ...prev, 
+                                is_on_sale: isOnSale,
+                                ...(isOnSale ? {} : { discount_percentage: 0, discounted_price: null })
+                              } : null);
+                              
+                              toast.success(isOnSale ? '할인 모드가 활성화되었습니다.' : '할인 모드가 비활성화되었습니다.');
+                            } catch (error: any) {
+                              toast.error('할인 설정 변경 중 오류가 발생했습니다.');
+                            }
+                          }}
+                          className="h-4 w-4 text-black focus:ring-black border-gray-300"
+                        />
+                        <label htmlFor="is-on-sale" className="ml-2 text-sm">할인 중</label>
+                      </div>
+                    </div>
+
+                    {product.is_on_sale && (
+                      <div className="space-y-4">
+                        {/* 할인율 설정 */}
+                        <div className="relative group">
+                          {editingField === 'discount_percentage' ? (
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">할인율 (%)</label>
+                              <div className="flex items-center">
+                                <input
+                                  type="number"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                  value={editNumberValue}
+                                  onChange={(e) => setEditNumberValue(parseInt(e.target.value) || 0)}
+                                  min="0"
+                                  max="100"
+                                />
+                                <span className="ml-2">%</span>
+                              </div>
+                              <div className="mt-2 flex justify-end">
+                                <button
+                                  className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
+                                  onClick={async () => {
+                                    const newDiscountPercentage = editNumberValue;
+                                    const newDiscountedPrice = product.price * (1 - newDiscountPercentage / 100);
+                                    
+                                    try {
+                                      const { error } = await supabase
+                                        .from('products')
+                                        .update({ 
+                                          discount_percentage: newDiscountPercentage,
+                                          discounted_price: newDiscountedPrice
+                                        })
+                                        .eq('id', productId);
+                                      
+                                      if (error) throw error;
+                                      
+                                      setProduct(prev => prev ? { 
+                                        ...prev, 
+                                        discount_percentage: newDiscountPercentage,
+                                        discounted_price: newDiscountedPrice
+                                      } : null);
+                                      
+                                      setEditingField(null);
+                                      toast.success('할인율이 저장되었습니다.');
+                                    } catch (error: any) {
+                                      toast.error('할인율 저장 중 오류가 발생했습니다.');
+                                    }
+                                  }}
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                                  onClick={cancelEditing}
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <p className="text-xs text-gray-500">할인율</p>
+                                <p className="text-sm font-medium">{product.discount_percentage || 0}%</p>
+                              </div>
+                              <button 
+                                className="text-xs text-gray-500 underline"
+                                onClick={() => startEditing('discount_percentage', product.discount_percentage || 0)}
+                              >
+                                수정
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 할인가 표시 (자동 계산) */}
+                        <div className="relative group">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-xs text-gray-500">할인가 (자동 계산)</p>
+                              <p className="text-sm font-medium text-red-600">
+                                {product.discounted_price ? `${Math.round(product.discounted_price).toLocaleString()}원` : '할인율 설정 시 자동 계산'}
+                              </p>
+                            </div>
+                            <span className="text-xs text-gray-400">자동</span>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                   
@@ -1256,24 +1457,6 @@ export default function EditProductPage() {
                     </div>
                   </div>
                 </div>
-
-            {/* 삭제 버튼 */}
-                <div className="mt-12 pt-8 border-t border-gray-200">
-              <div className="flex justify-between items-center">
-                    <Link
-                      href={`/store/${storeId}/product/${productId}`}
-                      className="text-sm text-gray-500 underline"
-                    >
-                      상세 페이지로 돌아가기
-                    </Link>
-                <button
-                  onClick={() => setShowDeleteConfirm(true)}
-                      className="px-8 py-4 text-sm uppercase tracking-widest font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
-                >
-                  제품 삭제
-                </button>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -1307,6 +1490,250 @@ export default function EditProductPage() {
           </div>
         </div>
       )}
+
+      {/* 이미지 크롭 모달 */}
+      <ImageCropModal
+        isOpen={showCropModal}
+        onClose={handleCropModalClose}
+        imageSrc={cropImageSrc}
+        onCropComplete={handleCropComplete}
+        aspectRatio={1} // 정사각형 비율, 필요에 따라 변경 가능
+      />
+      
+      {/* 플로팅 액션 메뉴 */}
+      <div className="fixed bottom-6 right-6 z-40 group">
+        {/* 호버 시 나타나는 추가 액션들 */}
+        <div className="absolute bottom-16 right-0 mb-2 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 ease-out space-y-3">
+          {/* 취소 버튼 */}
+          <div className="relative">
+            <button
+              onClick={() => router.push(`/store/${storeId}`)}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white font-medium shadow-lg hover:bg-gray-700 hover:shadow-xl transition-all duration-200 group/item"
+              style={{ borderRadius: '25px' }}
+            >
+              <svg className="w-4 h-4 transition-transform group-hover/item:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span className="text-sm">취소</span>
+            </button>
+          </div>
+          
+          {/* 삭제 버튼 */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white font-medium shadow-lg hover:bg-red-700 hover:shadow-xl transition-all duration-200 group/item"
+              style={{ borderRadius: '25px' }}
+            >
+              <svg className="w-4 h-4 transition-transform group-hover/item:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span className="text-sm">삭제</span>
+            </button>
+          </div>
+        </div>
+        
+        {/* 메인 저장 버튼 */}
+        <button
+          data-save-button
+          onClick={async () => {
+            setSaveStatus('saving');
+            try {
+              let hasChanges = false;
+              
+              // 1. 메인 이미지 업로드 처리
+              if (imageFile) {
+                hasChanges = true;
+                
+                // 이미지 파일 크기 확인 (10MB 제한)
+                if (imageFile.size > 10 * 1024 * 1024) {
+                  throw new Error('이미지 크기는 10MB 이하여야 합니다.');
+                }
+                
+                // 파일 확장자 확인
+                const fileExt = imageFile.name.split('.').pop()?.toLowerCase();
+                if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+                  throw new Error('지원되는 이미지 형식은 JPG, PNG, GIF, WEBP입니다.');
+                }
+                
+                // 파일명 생성
+                const fileName = `${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
+                const filePath = fileName;
+                
+                // 이전 이미지 URL 저장
+                const oldImageUrl = product?.product_image_url;
+                
+                // 이미지 업로드
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                  .from('images')
+                  .upload(filePath, imageFile, {
+                    cacheControl: '3600',
+                    upsert: false
+                  });
+                  
+                if (uploadError) {
+                  throw new Error(`이미지 업로드 실패: ${uploadError.message}`);
+                }
+                
+                // 공개 URL 가져오기
+                const { data } = supabase.storage
+                  .from('images')
+                  .getPublicUrl(filePath);
+                  
+                const newImageUrl = data.publicUrl;
+                
+                // 제품 테이블 업데이트
+                const { error: updateError } = await supabase
+                  .from('products')
+                  .update({ product_image_url: newImageUrl })
+                  .eq('id', productId);
+                  
+                if (updateError) {
+                  throw new Error(`제품 이미지 업데이트 실패: ${updateError.message}`);
+                }
+                
+                // 이전 이미지 삭제
+                if (oldImageUrl) {
+                  await deleteImage(oldImageUrl);
+                }
+                
+                // 상태 업데이트
+                setProduct(prev => prev ? { ...prev, product_image_url: newImageUrl } : null);
+                setImageFile(null);
+              }
+              
+              // 2. 추가 이미지 업로드 처리
+              if (additionalImages.length > 0) {
+                hasChanges = true;
+                
+                for (let i = 0; i < additionalImages.length; i++) {
+                  const imageData = additionalImages[i];
+                  if (!imageData.file) continue;
+                  
+                  try {
+                    // 파일 크기 확인
+                    if (imageData.file.size > 10 * 1024 * 1024) {
+                      logger.warn(`추가 이미지 ${i+1}의 크기가 10MB를 초과합니다. 건너뜁니다.`);
+                      continue;
+                    }
+                    
+                    // 파일 확장자 확인
+                    const fileExt = imageData.file.name.split('.').pop()?.toLowerCase();
+                    if (!fileExt || !['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+                      logger.warn(`추가 이미지 ${i+1}의 형식이 지원되지 않습니다. 건너뜁니다.`);
+                      continue;
+                    }
+                    
+                    // 파일명 생성
+                    const fileName = `products/${Date.now()}_${Math.floor(Math.random() * 1000)}_${i}.${fileExt}`;
+                    
+                    // 이미지 업로드
+                    const { data: uploadData, error: uploadError } = await supabase.storage
+                      .from('images')
+                      .upload(fileName, imageData.file, {
+                        cacheControl: '3600',
+                        upsert: false
+                      });
+                      
+                    if (uploadError) {
+                      logger.error(`추가 이미지 ${i+1} 업로드 실패:`, uploadError);
+                      continue;
+                    }
+                    
+                    // 공개 URL 가져오기
+                    const { data } = supabase.storage
+                      .from('images')
+                      .getPublicUrl(fileName);
+                      
+                    const imageUrl = data.publicUrl;
+                    
+                    // product_images 테이블에 저장
+                    const { error: insertError } = await supabase
+                      .from('product_images')
+                      .insert({
+                        product_id: productId,
+                        image_url: imageUrl,
+                        is_primary: false,
+                        display_order: i
+                      });
+                      
+                    if (insertError) {
+                      logger.error(`추가 이미지 ${i+1} DB 저장 실패:`, insertError);
+                    } else {
+                      // 성공적으로 저장된 이미지를 기존 이미지 목록에 추가
+                      setExistingImages(prev => [...prev, {
+                        url: imageUrl,
+                        id: `new-${Date.now()}-${i}`,
+                        is_primary: false
+                      }]);
+                    }
+                  } catch (error) {
+                    logger.error(`추가 이미지 ${i+1} 처리 중 오류:`, error);
+                  }
+                }
+                
+                // 추가 이미지 상태 초기화
+                setAdditionalImages([]);
+              }
+              
+              // 변경사항이 있었다면 성공 메시지, 없다면 정보 메시지
+              if (hasChanges) {
+                toast.success('변경사항이 저장되었습니다.');
+                setSaveStatus('saved');
+              } else {
+                toast.success('저장할 변경사항이 없습니다.');
+                setSaveStatus('saved');
+              }
+              
+              setTimeout(() => setSaveStatus('idle'), 2000);
+            } catch (error: any) {
+              console.error('저장 중 오류:', error);
+              toast.error(error.message || '저장 중 오류가 발생했습니다.');
+              setSaveStatus('error');
+              setTimeout(() => setSaveStatus('idle'), 2000);
+            }
+          }}
+          disabled={saveStatus === 'saving'}
+          className={`relative flex items-center space-x-2 px-6 py-3 font-medium shadow-xl transition-all duration-300 hover:scale-105 group-hover:shadow-2xl ${
+            saveStatus === 'saving' 
+              ? 'bg-gray-400 text-white cursor-not-allowed' 
+              : saveStatus === 'saved'
+              ? 'bg-green-600 text-white hover:bg-green-700'
+              : 'bg-black text-white hover:bg-gray-900'
+          }`}
+          style={{ borderRadius: '50px' }}
+        >
+          {saveStatus === 'saving' ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <span>저장 중...</span>
+            </>
+          ) : saveStatus === 'saved' ? (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>저장됨</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>저장하기</span>
+            </>
+          )}
+          
+          {/* 호버 힌트 */}
+          <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 -translate-x-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50">
+            <div className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow-lg whitespace-nowrap">
+              호버하여 더 많은 옵션 보기
+              {/* 말풍선 꼬리 */}
+              <div className="absolute top-1/2 left-full transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800"></div>
+            </div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 } 

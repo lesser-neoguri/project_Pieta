@@ -56,6 +56,9 @@ type ProductData = {
   warranty?: string;
   shipping_info?: string;
   return_policy?: string;
+  discount_percentage?: number;
+  discounted_price?: number | null;
+  is_on_sale?: boolean;
 };
 
 type ProductFavorite = {
@@ -111,6 +114,9 @@ export default function ProductDetailPage() {
   // 추가 이미지 관련 상태
   const [productImages, setProductImages] = useState<{ id: string; url: string; is_primary: boolean }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  // 탭 관련 상태 추가
+  const [activeTab, setActiveTab] = useState('details');
 
   // 추가 제품 배너 섹션을 위한 상태 추가
   const [storeProducts, setStoreProducts] = useState<ProductData[]>([]);
@@ -1133,270 +1139,132 @@ export default function ProductDetailPage() {
             </div>
             
             {/* 오른쪽: 제품 정보 섹션 */}
-            <div className="md:w-1/2 pl-0 md:pl-8 lg:pl-12 px-5 sm:px-6 md:px-0">
-              <div className="h-full flex flex-col md:max-w-md md:ml-8 lg:ml-16">
-                {/* 상단 여백 */}
-                <div className="flex-grow mb-auto md:min-h-[250px] lg:min-h-[300px]"></div>
+            <div className="w-full md:w-1/2 px-4 sm:px-6 md:px-0 md:pl-8 lg:pl-12">
+              <div className="h-full flex flex-col max-w-full md:max-w-lg md:ml-12 lg:ml-20">
+                {/* 상단 여백 - 데스크톱에서만 적용 */}
+                <div className="hidden md:block md:h-32 lg:h-40 xl:h-48"></div>
+                
+                {/* 모바일 상단 여백 */}
+                <div className="block md:hidden h-4"></div>
                 
                 {/* 제품 정보 콘텐츠 */}
-                <div>
-                  <div className="mb-10">
-                    <Link href={`/store/${storeId}`} className="inline-block mb-2">
-                      <h2 className="text-sm uppercase tracking-widest text-gray-600 font-medium">
+                <div className="space-y-4 md:space-y-6">
+                  {/* 제품 기본 정보 */}
+                  <div className="space-y-3 md:space-y-4">
+                    {/* 제품명 - 모바일 반응형 */}
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-normal text-gray-900 leading-tight">
+                      {product.product_name}
+                    </h1>
+                    
+                    {/* 브랜드명 - 더 작고 세련되게 */}
+                    <Link href={`/store/${storeId}`} className="inline-block">
+                      <p className="text-sm text-gray-500 font-normal tracking-wide">
                         {store?.store_name || '상점명'}
-                      </h2>
+                      </p>
                     </Link>
 
-                    <h1 className="text-2xl font-medium text-gray-900 mb-6">{product.product_name}</h1>
-                    
-                    <p className="text-lg text-gray-900 mb-8">
-                      {product.price.toLocaleString()}원
+                    {/* 상품번호 - Dior 스타일 */}
+                    <p className="text-xs text-gray-400 tracking-wider font-normal">
+                      상품번호: {productId.slice(-8).toUpperCase()}
                     </p>
                     
-                    <div className="mb-12">
-                      <div className="prose prose-sm max-w-none font-pretendard">
-                        <div 
-                          dangerouslySetInnerHTML={{ 
-                            __html: product.product_description ? DOMPurify.sanitize(product.product_description) : '' 
-                          }}
-                          className="rich-editor text-gray-600 leading-relaxed text-sm"
-                        />
-                      </div>
+                    {/* 제품 설명 - 모바일에서 더 간결하게 */}
+                    <div className="prose prose-sm max-w-none">
+                      <div 
+                        dangerouslySetInnerHTML={{ 
+                          __html: product.product_description ? DOMPurify.sanitize(product.product_description) : '' 
+                        }}
+                        className="text-gray-600 leading-relaxed text-sm font-normal line-clamp-3 md:line-clamp-none"
+                      />
                     </div>
                   </div>
 
-                  {/* 제품 세부 정보 아코디언 */}
-                  <div className="mb-10 space-y-5">
-                    {/* 패키지 및 선물 옵션 */}
-                    <div className="border-t border-gray-200">
-                      <div 
-                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
-                        onClick={() => {
-                          const header = document.querySelector(`[data-accordion="package-options"]`);
-                          const content = document.getElementById('package-options');
-                          if (header && content) {
-                            header.classList.toggle('open');
-                            content.classList.toggle('open');
-                            
-                            // 높이 자동 계산을 위한 처리
-                            if (content.classList.contains('open')) {
-                              const inner = content.querySelector('.accordion-inner');
-                              if (inner) {
-                                const height = inner.getBoundingClientRect().height;
-                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
-                              }
-                            } else {
-                              content.style.height = '0';
-                            }
-                          }
-                        }}
-                        data-accordion="package-options"
-                      >
-                        <h3 className="text-sm uppercase tracking-widest font-medium">패키지 옵션</h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      <div id="package-options" className="accordion-content">
-                        <div className="accordion-inner space-y-4">
-                          <div className="flex items-center">
-                            <input 
-                              type="radio" 
-                              id="standard-package" 
-                              name="package-option" 
-                              defaultChecked 
-                              onChange={() => {}}
-                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                            />
-                            <label htmlFor="standard-package" className="ml-2 text-sm">기본 패키지</label>
-                          </div>
-                          <div className="flex items-center">
-                            <input 
-                              type="radio" 
-                              id="gift-package" 
-                              name="package-option"
-                              onChange={() => {}}
-                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                            />
-                            <label htmlFor="gift-package" className="ml-2 text-sm">선물 포장 (+ ₩5,000)</label>
-                          </div>
-                          <div className="flex items-center">
-                            <input 
-                              type="radio" 
-                              id="premium-package" 
-                              name="package-option"
-                              onChange={() => {}}
-                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                            />
-                            <label htmlFor="premium-package" className="ml-2 text-sm">프리미엄 패키지 (+ ₩10,000)</label>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 배송 정보 */}
-                    <div className="border-t border-gray-200">
-                      <div 
-                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
-                        onClick={() => {
-                          const header = document.querySelector(`[data-accordion="shipping-info"]`);
-                          const content = document.getElementById('shipping-info');
-                          if (header && content) {
-                            header.classList.toggle('open');
-                            content.classList.toggle('open');
-                            
-                            // 높이 자동 계산을 위한 처리
-                            if (content.classList.contains('open')) {
-                              const inner = content.querySelector('.accordion-inner');
-                              if (inner) {
-                                const height = inner.getBoundingClientRect().height;
-                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
-                              }
-                            } else {
-                              content.style.height = '0';
-                            }
-                          }
-                        }}
-                        data-accordion="shipping-info"
-                      >
-                        <h3 className="text-sm uppercase tracking-widest font-medium">배송 안내</h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      <div id="shipping-info" className="accordion-content">
-                        <div className="accordion-inner space-y-2 text-sm text-gray-600">
-                          {product && product.shipping_info ? (
-                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shipping_info.replace(/\n/g, '<br/>')) }} />
-                          ) : (
-                            <>
-                              <p>• 평일 오후 2시 이전 주문 시 당일 출고</p>
-                              <p>• 주문 후 평균 2-3일 이내 수령</p>
-                              <p>• 전국 무료 배송</p>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 반품 정책 */}
-                    <div className="border-t border-gray-200">
-                      <div 
-                        className="flex justify-between items-center py-4 cursor-pointer accordion-header"
-                        onClick={() => {
-                          const header = document.querySelector(`[data-accordion="return-policy"]`);
-                          const content = document.getElementById('return-policy');
-                          if (header && content) {
-                            header.classList.toggle('open');
-                            content.classList.toggle('open');
-                            
-                            // 높이 자동 계산을 위한 처리
-                            if (content.classList.contains('open')) {
-                              const inner = content.querySelector('.accordion-inner');
-                              if (inner) {
-                                const height = inner.getBoundingClientRect().height;
-                                content.style.height = `${height + 16}px`; // 16px는 패딩 크기
-                              }
-                            } else {
-                              content.style.height = '0';
-                            }
-                          }
-                        }}
-                        data-accordion="return-policy"
-                      >
-                        <h3 className="text-sm uppercase tracking-widest font-medium">반품 정책</h3>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 accordion-arrow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      <div id="return-policy" className="accordion-content">
-                        <div className="accordion-inner space-y-2 text-sm text-gray-600">
-                          {product && product.return_policy ? (
-                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.return_policy.replace(/\n/g, '<br/>')) }} />
-                          ) : (
-                            <>
-                              <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
-                              <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
-                              <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                  {/* 색상 선택 - Dior 스타일 */}
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-900">다른 색상</h3>
+                    <div className="flex space-x-3">
+                      {/* 색상 샘플들 - 작은 원형 */}
+                      <button className="w-8 h-8 rounded-full bg-black border-2 border-gray-300 hover:border-gray-400 transition-colors"></button>
                     </div>
                   </div>
 
-                  {/* 구매 옵션 */}
-                  <div className="mb-12 space-y-6">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center border border-gray-300">
-                        <button 
-                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                          className="px-4 py-2 text-gray-600 hover:bg-gray-50"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          max={product.stock}
-                          value={quantity}
-                          onChange={handleQuantityChange}
-                          className="w-12 text-center border-x border-gray-300 py-2 focus:outline-none text-sm"
-                        />
-                        <button 
-                          onClick={() => setQuantity(Math.min(product.stock || 1, quantity + 1))}
-                          className="px-4 py-2 text-gray-600 hover:bg-gray-50"
-                        >
-                          +
-                        </button>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        재고: {product.stock}개
-                      </div>
+                  {/* Dior 스타일 구매 섹션 - 모바일 최적화 */}
+                  <div className="space-y-3 md:space-y-4">
+                    {/* 가격 표시 */}
+                    <div className="mb-4">
+                      {product.is_on_sale && product.discounted_price && product.discount_percentage ? (
+                        <div className="space-y-2">
+                          {/* 할인율 표시 */}
+                          <div className="inline-block bg-black text-white text-xs px-3 py-1 font-medium">
+                            -{product.discount_percentage}% 할인
+                          </div>
+                          {/* 원래 가격 (취소선) */}
+                          <p className="text-sm text-gray-400 line-through">
+                            ₩{product.price.toLocaleString()}
+                          </p>
+                          {/* 할인가 */}
+                          <p className="text-xl font-medium text-red-600">
+                            ₩{Math.round(product.discounted_price).toLocaleString()}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xl font-medium text-black">
+                          ₩{product.price.toLocaleString()}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="space-y-4">
-                      <button
-                        onClick={handleAddToCart}
-                        disabled={!product.is_available}
-                        className={`w-full py-4 text-sm uppercase tracking-widest font-medium ${
-                          product.is_available
-                            ? 'bg-black text-white hover:bg-gray-900'
-                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                        } transition-colors`}
-                      >
-                        장바구니에 추가
-                      </button>
-                      <button
-                        onClick={() => {/* 구매하기 기능 */}}
-                        disabled={!product.is_available}
-                        className={`w-full py-4 text-sm uppercase tracking-widest font-medium border ${
-                          product.is_available
-                            ? 'border-black text-black hover:bg-gray-50'
-                            : 'border-gray-300 text-gray-500 cursor-not-allowed'
-                        } transition-colors`}
-                      >
-                        바로 구매하기
-                      </button>
+                    {/* 장바구니 버튼 - 모바일 반응형 */}
+                    <button
+                      onClick={handleAddToCart}
+                      disabled={!product.is_available}
+                      className={`w-full flex items-center justify-center py-3 md:py-4 px-4 md:px-6 text-sm font-medium ${
+                        product.is_available
+                          ? 'bg-black text-white hover:bg-gray-900'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      } transition-colors`}
+                    >
+                      <span>장바구니에 추가</span>
+                    </button>
+
+                    {/* 빠른 구매 버튼 - 모바일 반응형 */}
+                    <button
+                      onClick={() => {/* 구매하기 기능 */}}
+                      disabled={!product.is_available}
+                      className={`w-full py-3 md:py-4 text-sm font-medium border ${
+                        product.is_available
+                          ? 'border-black text-black hover:bg-gray-50'
+                          : 'border-gray-300 text-gray-500 cursor-not-allowed'
+                      } transition-colors flex items-center justify-center`}
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      빠른 구매
+                    </button>
+
+                    {/* 배송 안내 */}
+                    <div className="text-xs text-gray-500 text-center py-1">
+                      <p>발송일 기준 1-2일 내 배송 예정</p>
+                    </div>
+
+                    {/* 관심상품 버튼 - 모바일 최적화 */}
+                    <div className="flex justify-center pt-1 md:pt-2">
                       <button
                         onClick={toggleFavorite}
-                        className={`w-full flex items-center justify-center py-4 text-sm uppercase tracking-widest font-medium ${
-                          isFavorite 
-                            ? 'bg-gray-50 text-black border border-gray-300' 
-                            : 'bg-white text-gray-700 border border-gray-200'
-                        } transition-colors`}
+                        className="flex items-center text-xs md:text-sm font-medium text-gray-600 hover:text-black transition-colors py-2"
                       >
                         <svg 
                           xmlns="http://www.w3.org/2000/svg" 
-                          className={`h-4 w-4 mr-2 ${isFavorite ? 'text-black fill-black' : 'text-gray-500'}`} 
+                          className={`h-4 md:h-5 w-4 md:w-5 mr-2 ${isFavorite ? 'text-black fill-black' : 'text-gray-400'}`} 
                           viewBox="0 0 24 24" 
                           stroke="currentColor"
                           fill={isFavorite ? 'currentColor' : 'none'}
+                          strokeWidth={1}
                         >
                           <path 
                             strokeLinecap="round" 
                             strokeLinejoin="round" 
-                            strokeWidth={1.5} 
                             d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
                           />
                         </svg>
@@ -1405,39 +1273,121 @@ export default function ProductDetailPage() {
                     </div>
                   </div>
 
-                  {/* 공유 */}
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex items-center justify-center space-x-8">
-                      <button className="text-gray-600 hover:text-black transition-colors">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                        </svg>
+                  {/* 탭 메뉴 - 모바일 반응형 */}
+                  <div className="border-b border-gray-200 mt-6 md:mt-8">
+                    <div className="flex space-x-4 md:space-x-8 overflow-x-auto hide-scrollbar">
+                      <button 
+                        onClick={() => setActiveTab('details')}
+                        className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                          activeTab === 'details' 
+                            ? 'text-gray-900 border-b-2 border-black' 
+                            : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        상세 설명
                       </button>
-                      <button className="text-gray-600 hover:text-black transition-colors">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.259-.012 3.668-.069 4.948-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                        </svg>
+                      <button 
+                        onClick={() => setActiveTab('size')}
+                        className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                          activeTab === 'size' 
+                            ? 'text-gray-900 border-b-2 border-black' 
+                            : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        사이즈 가이드
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('shipping')}
+                        className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                          activeTab === 'shipping' 
+                            ? 'text-gray-900 border-b-2 border-black' 
+                            : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        문의 및 배송
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('returns')}
+                        className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                          activeTab === 'returns' 
+                            ? 'text-gray-900 border-b-2 border-black' 
+                            : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        배송 및 반품
                       </button>
                     </div>
                   </div>
-                  
-                  {/* 관리 버튼 (소유자만) */}
-                  {user && isOwner && (
-                    <div className="mt-8 pt-4 border-t border-gray-200">
-                      <div className="flex justify-center space-x-6">
-                        <Link
-                          href={`/store/${storeId}/product/edit/${productId}`}
-                          className="text-xs uppercase tracking-widest text-gray-600 hover:text-black transition-colors"
-                        >
-                          편집
-                        </Link>
-                        <button
-                          onClick={() => setShowDeleteConfirm(true)}
-                          className="text-xs uppercase tracking-widest text-gray-600 hover:text-black transition-colors"
-                        >
-                          삭제
+
+                  {/* 탭 컨텐츠 - 모바일 최적화 */}
+                  <div className="py-2 md:py-3">
+                    {activeTab === 'details' && (
+                      <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-2">
+                        <p className="leading-relaxed">2025년 가을에 새롭게 선보이는 소프트 {product.product_name}은 모던함과 유행을 타지 않는 우아함을 결합한 유명한 구조가 특징입니다. 고급스러운 소재와 정교한 마감으로 제작된 이 제품은 구조적으로 복잡하지만 우아한 CD 시그니처 클래스프가 특징적인 훌륭한 액세서리 라인을 완성하여 일상에서 제이아 스타일링 경험을 선사합니다.</p>
+                        {product.material && <p><strong>소재:</strong> {product.material}</p>}
+                        {product.weight && <p><strong>무게:</strong> {product.weight}g</p>}
+                        {product.dimensions && <p><strong>크기:</strong> {product.dimensions}</p>}
+                        {product.origin && <p><strong>원산지:</strong> {product.origin}</p>}
+                        <button className="text-xs md:text-sm font-medium text-gray-900 underline hover:no-underline transition-all mt-2 md:mt-3">
+                          자세히 보기
                         </button>
                       </div>
+                    )}
+                    
+                    {activeTab === 'size' && (
+                      <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-2">
+                        <p>정확한 사이즈 선택을 위한 가이드입니다.</p>
+                        <p>측정 방법에 따라 1-2cm 오차가 있을 수 있습니다.</p>
+                        <p>사이즈 문의는 고객센터로 연락주시기 바랍니다.</p>
+                      </div>
+                    )}
+                    
+                    {activeTab === 'shipping' && (
+                      <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-2">
+                        {product && product.shipping_info ? (
+                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shipping_info.replace(/\n/g, '<br/>')) }} />
+                        ) : (
+                          <>
+                            <p>• 평일 오후 2시 이전 주문 시 당일 출고</p>
+                            <p>• 주문 후 평균 2-3일 이내 수령</p>
+                            <p>• 전국 무료 배송</p>
+                            <p>• 제주도 및 도서산간 지역 추가 배송비 발생</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    
+                    {activeTab === 'returns' && (
+                      <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-2">
+                        {product && product.return_policy ? (
+                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.return_policy.replace(/\n/g, '<br/>')) }} />
+                        ) : (
+                          <>
+                            <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
+                            <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
+                            <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
+                            <p>• 착용, 사용 흔적이 있는 상품은 교환/반품 불가</p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 관리 버튼 (소유자만) - 모바일 최적화 */}
+                  {user && isOwner && (
+                    <div className="flex justify-center space-x-6 md:space-x-8 pt-6 md:pt-8 mt-6 md:mt-8 border-t border-gray-100">
+                      <Link
+                        href={`/store/${storeId}/product/edit/${productId}`}
+                        className="text-xs font-medium text-gray-500 hover:text-black transition-colors underline hover:no-underline py-2"
+                      >
+                        편집
+                      </Link>
+                      <button
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="text-xs font-medium text-gray-500 hover:text-red-600 transition-colors underline hover:no-underline py-2"
+                      >
+                        삭제
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1500,9 +1450,9 @@ export default function ProductDetailPage() {
           {/* 리뷰 섹션 추가 */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
             <div className="border-b border-gray-200 pb-4 mb-8">
-              <h2 className="text-lg uppercase tracking-widest text-gray-900 font-light">
-                고객 리뷰
-              </h2>
+                              <h2 className="text-lg uppercase tracking-widest text-gray-900 font-medium">
+                  고객 리뷰
+                </h2>
             </div>
             
             {reviewLoading ? (
@@ -1723,7 +1673,7 @@ export default function ProductDetailPage() {
             {/* 같은 상점의 다른 제품 */}
             {storeProducts.length > 0 && (
               <div className="mb-12">
-                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-medium">
                   {store.store_name}의 다른 제품
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
@@ -1759,7 +1709,7 @@ export default function ProductDetailPage() {
             {/* 추천 상품 */}
             {recommendedProducts.length > 0 && (
               <div className="mb-12">
-                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-medium">
                   추천 상품
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
@@ -1790,7 +1740,7 @@ export default function ProductDetailPage() {
             {/* 최근 본 상품 */}
             {recentlyViewedProducts.length > 0 && (
               <div>
-                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-light">
+                <h2 className="text-lg uppercase tracking-widest text-gray-900 mb-6 text-center font-medium">
                   최근 본 상품
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
@@ -1820,6 +1770,214 @@ export default function ProductDetailPage() {
           </div>
         </div>
       )}
+
+      {/* 풋터 */}
+      <footer className="bg-white border-t border-gray-200">
+        {/* 뉴스레터 섹션 */}
+        <div className="py-12 bg-gray-50">
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="text-center max-w-2xl mx-auto">
+              <h2 className="text-lg font-normal text-gray-900 mb-3">
+                Pieta의 최신 소식 받고 영감 얻기
+              </h2>
+              <p className="text-sm text-gray-600 mb-6">
+                만족할 수 있는 제품으로 나만의 특별한 순간을 주문하세요.
+              </p>
+              <div className="flex max-w-md mx-auto">
+                <input
+                  type="email"
+                  placeholder="이메일"
+                  className="flex-1 px-4 py-3 border border-gray-300 text-sm focus:outline-none focus:border-gray-400"
+                />
+                <button className="px-6 py-3 bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors">
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 메인 풋터 컨텐츠 */}
+        <div className="py-8 md:py-12 px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+              {/* Pieta 부티크 */}
+              <div>
+                <h3 className="text-sm font-medium tracking-wider uppercase mb-4 text-gray-900">
+                  Pieta 부티크
+                </h3>
+                <ul className="space-y-3">
+                  <li>
+                    <Link href="/stores" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      피에타 디럭스 부티크
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/boutiques" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      피에타 진주 부티크
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/locations" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      매장 및 위치
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* 고객 지원 */}
+              <div>
+                <h3 className="text-sm font-medium tracking-wider uppercase mb-4 text-gray-900">
+                  고객 지원
+                </h3>
+                <ul className="space-y-3">
+                  <li>
+                    <Link href="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      고객센터
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/shipping" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      배송 및 반품
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/faq" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      FAQ
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/size-guide" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      사이즈 가이드
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/care" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      제품 관리 방법
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* 피에타 하우스 */}
+              <div>
+                <h3 className="text-sm font-medium tracking-wider uppercase mb-4 text-gray-900">
+                  피에타 하우스
+                </h3>
+                <ul className="space-y-3">
+                  <li>
+                    <Link href="/sustainability" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      피에타 지속가능성
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      브랜드 스토리
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/craftsmanship" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      장인정신
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/heritage" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      브랜드 유산
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              {/* 법률 */}
+              <div>
+                <h3 className="text-sm font-medium tracking-wider uppercase mb-4 text-gray-900">
+                  법률
+                </h3>
+                <ul className="space-y-3">
+                  <li>
+                    <Link href="/legal" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      법적 고지
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/privacy" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      개인정보 취급 방침
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/terms" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      이용약관
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/sitemap" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                      사이트맵
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* 개인정보 처리방침 및 소셜미디어 */}
+            <div className="mt-12 pt-8 border-t border-gray-200">
+              <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+                {/* 소셜미디어 링크 */}
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-600">피에타 소셜미디어</span>
+                  <div className="flex space-x-4">
+                    <Link href="#" className="text-gray-500 hover:text-gray-900 transition-colors">
+                      <span className="text-sm">Kakaotalk</span>
+                    </Link>
+                    <Link href="#" className="text-gray-500 hover:text-gray-900 transition-colors">
+                      <span className="text-sm">Instagram</span>
+                    </Link>
+                    <Link href="#" className="text-gray-500 hover:text-gray-900 transition-colors">
+                      <span className="text-sm">Facebook</span>
+                    </Link>
+                    <Link href="#" className="text-gray-500 hover:text-gray-900 transition-colors">
+                      <span className="text-sm">YouTube</span>
+                    </Link>
+                  </div>
+                </div>
+
+                {/* 언어/지역 선택 */}
+                <div className="flex items-center space-x-4 text-sm text-gray-600">
+                  <button className="hover:text-gray-900 transition-colors border-r border-gray-300 pr-4">
+                    국가/지역: 한국 (한국어)
+                  </button>
+                  <Link href="/global" className="hover:text-gray-900 transition-colors">
+                    →
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* 회사 정보 및 저작권 */}
+            <div className="mt-8 pt-6 border-t border-gray-100">
+              <div className="text-xs text-gray-500 space-y-2">
+                <p>
+                  피에타컬렉션 주식회사 | 04539 서울특별시 중구 청계천로 19, 26층(소공동) | 사업자등록번호: 120-81-74197
+                </p>
+                <p>
+                  대표자: 투자전문회사, Khong May Won Sharon | 통신판매업
+                </p>
+                <p>
+                  신고번호: 2021-서울중구-01116 | 사업자정보확인
+                </p>
+                <p>
+                  고객 센터 : 02-3280-0104 (contactpieta@christandior.com) | 호스팅 서비스 : Smile Hosting
+                </p>
+                <p className="font-medium text-gray-600 mt-4">
+                  COPYRIGHT © CHRISTIAN DIOR COUTURE KOREA ALL RIGHTS RESERVED.
+                </p>
+                <p className="mt-2">
+                  투자광고에 대한 주의사항 : 이 광고는 광고 참여 시점의 투자대상 및 투자위험 등에 대한 최종 안내로 활용됨니다.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 } 

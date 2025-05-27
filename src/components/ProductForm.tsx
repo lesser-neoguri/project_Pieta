@@ -29,6 +29,7 @@ type ProductFormProps = {
   onProductCreated?: () => void;
   imageFile?: File | null;
   additionalImages?: File[];
+  onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved' | 'error') => void;
 };
 
 export default function ProductForm({ 
@@ -39,7 +40,8 @@ export default function ProductForm({
   continueAdding = false,
   onProductCreated,
   imageFile,
-  additionalImages = []
+  additionalImages = [],
+  onSaveStatusChange
 }: ProductFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -209,6 +211,11 @@ export default function ProductForm({
     setLoading(true);
     setMessage(null);
     
+    // 상위 컴포넌트에 저장 시작 알림
+    if (onSaveStatusChange) {
+      onSaveStatusChange('saving');
+    }
+    
     try {
       let product_image_url = initialData?.product_image_url || null;
       let oldImageUrl = null;
@@ -322,6 +329,15 @@ export default function ProductForm({
           type: 'success'
         });
 
+        // 상위 컴포넌트에 저장 완료 알림
+        if (onSaveStatusChange) {
+          onSaveStatusChange('saved');
+          // 2초 후에 idle 상태로 변경
+          setTimeout(() => {
+            onSaveStatusChange('idle');
+          }, 2000);
+        }
+
         // 수정 후에는 항상 상점 페이지로 이동
         setTimeout(() => {
           router.push(`/store/${storeId}`);
@@ -393,6 +409,15 @@ export default function ProductForm({
           type: 'success'
         });
         
+        // 상위 컴포넌트에 저장 완료 알림
+        if (onSaveStatusChange) {
+          onSaveStatusChange('saved');
+          // 2초 후에 idle 상태로 변경
+          setTimeout(() => {
+            onSaveStatusChange('idle');
+          }, 2000);
+        }
+        
         if (stayOnPage) {
           // 폼 초기화하고 현재 페이지에 머무름
           resetForm();
@@ -413,6 +438,11 @@ export default function ProductForm({
         text: `제품 저장 중 오류가 발생했습니다: ${error.message || JSON.stringify(error)}`,
         type: 'error'
       });
+      
+      // 상위 컴포넌트에 에러 알림
+      if (onSaveStatusChange) {
+        onSaveStatusChange('error');
+      }
     } finally {
       setLoading(false);
     }
@@ -731,38 +761,6 @@ export default function ProductForm({
             <span className="text-sm text-gray-600 font-pretendard">판매 가능 상태</span>
           </label>
         </div>
-      </div>
-
-      {!isEdit && continueAdding && (
-        <div className="mt-8">
-          <label className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              id="stay_on_page"
-              checked={stayOnPage}
-              onChange={(e) => setStayOnPage(e.target.checked)}
-              className="h-5 w-5 border-gray-300 text-black focus:ring-black rounded-sm"
-            />
-            <span className="text-sm text-gray-600 font-pretendard">제품 등록 후 계속해서 다른 제품 추가하기</span>
-          </label>
-        </div>
-      )}
-      
-      <div className="flex justify-end space-x-4 mt-12">
-        <button
-          type="button"
-          onClick={() => router.push(`/store/${storeId}`)}
-          className="px-8 py-4 text-sm uppercase tracking-widest font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-pretendard"
-        >
-          취소
-        </button>
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-8 py-4 text-sm uppercase tracking-widest font-medium bg-black text-white hover:bg-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-pretendard"
-        >
-          {loading ? '저장 중...' : (isEdit ? '수정하기' : '등록하기')}
-        </button>
       </div>
     </form>
   );

@@ -31,24 +31,7 @@ type WishlistItem = {
 const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathname }: { showBanner: boolean; setShowBanner: (show: boolean) => void; pathname: string }) => {
   if (!showBanner || pathname === '/') return null;
   
-  return (
-    <div className="bg-black text-white px-4 py-2 relative transition-all duration-300 ease-in-out">
-      <div className="max-w-8xl mx-auto flex justify-between items-center">
-        <div className="flex-1 text-center font-medium text-sm sm:text-base">
-          신규 회원 가입 시 첫 구매 5% 할인 혜택을 드립니다!
-        </div>
-        <button 
-          onClick={() => setShowBanner(false)} 
-          className="text-white hover:text-gray-100"
-          aria-label="배너 닫기"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
+  return null;
 }), { ssr: false });
 
 export default function Navbar() {

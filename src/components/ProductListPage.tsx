@@ -8,6 +8,7 @@ import MainLayout from '@/components/layout/MainLayout';
 import logger from '@/lib/logger';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useScroll } from '@/hooks/useScroll';
+import { toast } from 'react-hot-toast';
 
 export type ProductData = {
   id: string;
@@ -23,6 +24,9 @@ export type ProductData = {
   average_rating?: number;
   store_name?: string;
   category?: string;
+  discount_percentage?: number;
+  discounted_price?: number;
+  is_on_sale?: boolean;
 };
 
 export type CategoryItem = {
@@ -68,6 +72,10 @@ export default function ProductListPage({
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
+  
+  // 좋아요 상태 관리
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [favoriteLoading, setFavoriteLoading] = useState<Set<string>>(new Set());
 
   // 배너 높이 계산 - useMemo로 최적화
   const bannerHeight = useMemo(() => {
@@ -187,6 +195,96 @@ export default function ProductListPage({
     setSearchQuery('');
     setSelectedCategory('all');
   }, []);
+
+  // 사용자의 좋아요 상태 불러오기
+  const fetchFavorites = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const { data: favoriteData, error } = await supabase
+        .from('product_favorites')
+        .select('product_id')
+        .eq('user_id', user.id);
+        
+      if (error) {
+        console.error('좋아요 데이터 로딩 오류:', error);
+        return;
+      }
+      
+      if (favoriteData) {
+        const favoriteIds = new Set(favoriteData.map(fav => fav.product_id));
+        setFavorites(favoriteIds);
+      }
+    } catch (error) {
+      console.error('좋아요 데이터 로딩 중 예외 발생:', error);
+    }
+  }, [user]);
+
+  // 좋아요 토글 함수
+  const handleToggleFavorite = useCallback(async (e: React.MouseEvent, productId: string) => {
+    e.preventDefault(); // Link 클릭 방지
+    e.stopPropagation();
+    
+    if (!user) {
+      toast.error('로그인이 필요한 기능입니다.');
+      return;
+    }
+
+    // 로딩 상태 설정
+    setFavoriteLoading(prev => new Set([...prev, productId]));
+    
+    try {
+      const isFavorite = favorites.has(productId);
+      
+      if (isFavorite) {
+        // 좋아요 제거
+        const { error } = await supabase
+          .from('product_favorites')
+          .delete()
+          .eq('product_id', productId)
+          .eq('user_id', user.id);
+          
+        if (error) throw error;
+        
+        setFavorites(prev => {
+          const newFavorites = new Set(prev);
+          newFavorites.delete(productId);
+          return newFavorites;
+        });
+        
+        toast.success('관심 상품에서 제거되었습니다.');
+      } else {
+        // 좋아요 추가
+        const { error } = await supabase
+          .from('product_favorites')
+          .insert([{ product_id: productId, user_id: user.id }]);
+          
+        if (error) throw error;
+        
+        setFavorites(prev => new Set([...prev, productId]));
+        toast.success('관심 상품에 추가되었습니다.');
+      }
+    } catch (error: any) {
+      console.error('좋아요 처리 중 오류:', error);
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      // 로딩 상태 해제
+      setFavoriteLoading(prev => {
+        const newLoading = new Set(prev);
+        newLoading.delete(productId);
+        return newLoading;
+      });
+    }
+  }, [user, favorites]);
+
+  // 사용자 변경 시 좋아요 데이터 로드
+  useEffect(() => {
+    if (user) {
+      fetchFavorites();
+    } else {
+      setFavorites(new Set());
+    }
+  }, [user, fetchFavorites]);
 
   return (
     <MainLayout centered={false}>
@@ -328,39 +426,100 @@ export default function ProductListPage({
                 총 <span className="font-medium text-black">{products.length}</span>개의 제품
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-x-1 gap-y-4">
-                {products.map((product) => (
-                  <Link 
-                    key={product.id}
-                    href={`/store/${product.store_id}/product/${product.id}`}
-                    className="group"
-                  >
-                    <div className="overflow-hidden bg-[#f8f8f8] aspect-square mb-5 relative">
-                      {!product.is_available && (
-                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1 uppercase tracking-wider z-10 font-light">
-                          품절
+                {products.map((product) => {
+                  const isFavorite = favorites.has(product.id);
+                  const isLoading = favoriteLoading.has(product.id);
+                  
+                  return (
+                    <Link 
+                      key={product.id}
+                      href={`/store/${product.store_id}/product/${product.id}`}
+                      className="group"
+                    >
+                      <div className="overflow-hidden bg-[#f8f8f8] aspect-square mb-5 relative">
+                        {/* 품절 표시 */}
+                        {!product.is_available && (
+                          <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1 uppercase tracking-wider z-10 font-light">
+                            품절
+                          </div>
+                        )}
+                        
+                        {product.product_image_url ? (
+                          <img
+                            src={product.product_image_url}
+                            alt={product.product_name}
+                            className="w-full h-full object-contain p-2 group-hover:scale-105 transition-all duration-700 ease-out"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
+                            이미지 없음
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400 mb-1 uppercase tracking-wider font-light">{product.store_name}</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-medium line-clamp-1 group-hover:text-gray-700 transition-colors flex-1 pr-2">
+                            {product.product_name}
+                          </h3>
+                          {/* 좋아요 하트 아이콘 */}
+                          <button
+                            onClick={(e) => handleToggleFavorite(e, product.id)}
+                            className={`p-1 transition-all duration-200 ${
+                              isLoading 
+                                ? 'cursor-not-allowed opacity-50' 
+                                : 'hover:opacity-70'
+                            }`}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                            ) : (
+                              <svg 
+                                xmlns="http://www.w3.org/2000/svg" 
+                                className={`h-4 w-4 transition-colors duration-200 ${
+                                  isFavorite 
+                                    ? 'text-black fill-black' 
+                                    : 'text-gray-400 hover:text-black'
+                                }`}
+                                viewBox="0 0 24 24" 
+                                stroke="currentColor"
+                                fill={isFavorite ? 'currentColor' : 'none'}
+                                strokeWidth={2}
+                              >
+                                <path 
+                                  strokeLinecap="round" 
+                                  strokeLinejoin="round" 
+                                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
+                                />
+                              </svg>
+                            )}
+                          </button>
                         </div>
-                      )}
-                      {product.product_image_url ? (
-                        <img
-                          src={product.product_image_url}
-                          alt={product.product_name}
-                          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-all duration-700 ease-out"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                          이미지 없음
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400 mb-1 uppercase tracking-wider font-light">{product.store_name}</p>
-                      <h3 className="text-sm font-medium mb-2 line-clamp-1 group-hover:text-gray-700 transition-colors">
-                        {product.product_name}
-                      </h3>
-                      <p className="text-sm font-medium">{product.price.toLocaleString()}원</p>
-                    </div>
-                  </Link>
-                ))}
+                        {/* 가격 표시 - 할인가 있으면 할인가 UI, 없으면 기본 가격 */}
+                        {product.is_on_sale && product.discounted_price && product.discount_percentage ? (
+                          <div className="space-y-1">
+                            {/* 원래 가격 (취소선) */}
+                            <p className="text-xs text-gray-400 line-through font-light">
+                              ₩{product.price.toLocaleString()}
+                            </p>
+                            {/* 할인율과 할인가 */}
+                            <div className="flex items-center space-x-2">
+                              <span className="bg-black text-white text-xs px-2 py-1 font-medium">
+                                -{product.discount_percentage}%
+                              </span>
+                              <span className="text-sm font-medium">
+                                ₩{product.discounted_price.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm font-medium">₩{product.price.toLocaleString()}</p>
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             </>
           )}

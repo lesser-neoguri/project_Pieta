@@ -3,22 +3,14 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTransition } from '@/contexts/TransitionContext';
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const { user } = useAuth();
-  const { handleNavigate } = useTransition();
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // 제품보러가기 클릭 핸들러
-  const handleProductsClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    handleNavigate('/products');
-  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -76,13 +68,12 @@ export default function HomePage() {
                   </Link>
                 </>
               ) : null}
-              <a
+              <Link
                 href="/products"
-                onClick={handleProductsClick}
                 className="inline-block px-8 py-4 bg-white/20 backdrop-blur-sm text-white text-sm tracking-widest uppercase hover:bg-white hover:text-black transition-colors duration-300"
               >
                 제품보러가기
-              </a>
+              </Link>
             </div>
           </div>
 
@@ -113,13 +104,12 @@ export default function HomePage() {
           <p className="text-sm uppercase tracking-widest mb-2">프리미엄 컬렉션</p>
           <h2 className="text-4xl font-light uppercase tracking-[0.2em] mb-6">COLLECTION</h2>
           <p className="text-sm mb-8">엄선된 프리미엄 제품들을 만나보세요</p>
-          <a 
+          <Link 
             href="/products" 
-            onClick={handleProductsClick}
             className="inline-block px-10 py-3 border border-black text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
           >
             더 알아보기
-          </a>
+          </Link>
         </div>
         {/* 배경 색상 설정 */}
         <div className="absolute inset-0 z-0 bg-gray-100"></div>

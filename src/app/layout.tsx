@@ -3,10 +3,8 @@ import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProfileProvider } from '@/contexts/ProfileContext';
-import { TransitionProvider } from '@/contexts/TransitionContext';
 import ProfileSidebar from '@/components/ProfileSidebar';
 import Navbar from "@/components/Navbar";
-import PageTransition from "@/components/PageTransition";
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -44,12 +42,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <ProfileProvider>
-            <TransitionProvider>
-              <Navbar />
-              <PageTransition />
-              <main>{children}</main>
-              <ProfileSidebar />
-            </TransitionProvider>
+            <Navbar />
+            <main>{children}</main>
+            <ProfileSidebar />
           </ProfileProvider>
         </AuthProvider>
       </body>
