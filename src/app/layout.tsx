@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProfileProvider } from '@/contexts/ProfileContext';
+import { ErrorProvider } from '@/contexts/ErrorContext';
 import ProfileSidebar from '@/components/ProfileSidebar';
 import Navbar from "@/components/Navbar";
 
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoSansKr.variable} font-sans antialiased`}
       >
+        <ErrorProvider>
         <AuthProvider>
           <ProfileProvider>
             <Navbar />
@@ -47,6 +49,7 @@ export default function RootLayout({
             <ProfileSidebar />
           </ProfileProvider>
         </AuthProvider>
+        </ErrorProvider>
       </body>
     </html>
   );

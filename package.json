@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
+    "@chakra-ui/react": "^2.8.2",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.0",
+    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@supabase/mcp-server-supabase": "^0.3.6",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@tiptap/extension-heading": "^2.12.0",
@@ -22,6 +27,7 @@
     "axios": "^1.8.3",
     "cheerio": "^1.0.0",
     "dompurify": "^3.2.5",
+    "framer-motion": "^11.0.6",
     "lucide-react": "^0.487.0",
     "next": "15.2.2",
     "node-html-parser": "^7.0.1",
@@ -51,5 +57,8 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.6",
     "typescript": "^5"
+  },
+  "overrides": {
+    "tailwindcss": "^3.4.1"
   }
 }
