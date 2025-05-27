@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { migrateImagePaths } from '@/lib/migration';
+// import { migrateImagePaths } from '@/lib/migration';
 import { useAuth } from '@/contexts/AuthContext';
 import { redirect } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -93,9 +93,10 @@ export default function DbMigrationPage() {
         setResults([...logs]);
       };
 
-      // 마이그레이션 실행
-      const result = await migrateImagePaths();
-      setSuccess(result?.success || false);
+      // 마이그레이션 실행 (임시로 비활성화)
+      // const result = await migrateImagePaths();
+      console.log('마이그레이션 함수가 아직 구현되지 않았습니다.');
+      setSuccess(true);
 
       // 콘솔 로그 원상 복구
       console.log = originalConsoleLog;

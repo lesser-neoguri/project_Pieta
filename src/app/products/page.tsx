@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import ProductListPage, { CategoryItem } from '@/components/ProductListPage';
 
 const productCategories: CategoryItem[] = [
@@ -11,7 +12,7 @@ const productCategories: CategoryItem[] = [
   { id: 'other', name: '기타' }
 ];
 
-export default function ProductsPage() {
+function ProductsContent() {
   return (
     <ProductListPage
       title="COLLECTION"
@@ -21,5 +22,13 @@ export default function ProductsPage() {
       productFilter="" // 빈 필터로 모든 제품 표시
       categoryType="uppercase"
     />
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<div>로딩 중...</div>}>
+      <ProductsContent />
+    </Suspense>
   );
 } 

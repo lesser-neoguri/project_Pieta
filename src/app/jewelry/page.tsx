@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ProductListPage, { CategoryItem } from '@/components/ProductListPage';
 
@@ -27,9 +27,9 @@ function getFilterString(category?: string): string {
   return `${filter},product_name.ilike.%주얼리%,product_name.ilike.%목걸이%,product_name.ilike.%반지%,product_name.ilike.%귀걸이%,product_name.ilike.%팔찌%`;
 }
 
-export default function JewelryPage() {
+function JewelryContent() {
   const searchParams = useSearchParams();
-  const categoryParam = searchParams.get('category') || 'all';
+  const categoryParam = searchParams?.get('category') || 'all';
   const [selectedMaterial, setSelectedMaterial] = useState<string>('all');
 
   // 소재 옵션
@@ -72,5 +72,13 @@ export default function JewelryPage() {
       productFilter={productFilter}
       categoryType="standard"
     />
+  );
+}
+
+export default function JewelryPage() {
+  return (
+    <Suspense fallback={<div>로딩 중...</div>}>
+      <JewelryContent />
+    </Suspense>
   );
 } 
