@@ -55,7 +55,7 @@ type StoreDesign = {
   products_per_row?: number; // 기본 행당 제품 수
   enable_custom_rows?: boolean; // 커스텀 행 레이아웃 활성화
   // 상품 간격 설정 추가
-  product_spacing?: 'tight' | 'normal' | 'loose' | 'extra-loose';
+  product_spacing?: 'none' | 'tight' | 'normal' | 'loose' | 'extra-loose';
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -451,6 +451,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
   const getProductSpacing = () => {
     switch (design.product_spacing) {
+      case 'none': return 'gap-0';
       case 'tight': return 'gap-2 md:gap-3';
       case 'normal': return 'gap-6 md:gap-8';
       case 'loose': return 'gap-8 md:gap-12';
@@ -726,8 +727,9 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                     <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
                       상품 간격
                     </label>
-                    <div className="grid grid-cols-2 gap-1">
+                    <div className="grid grid-cols-3 gap-1">
                       {[
+                        { value: 'none', label: '간격없음' },
                         { value: 'tight', label: '좁게' },
                         { value: 'normal', label: '보통' },
                         { value: 'loose', label: '넓게' },
@@ -903,8 +905,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       {/* 간격 */}
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">간격</label>
-                        <div className="grid grid-cols-2 gap-1">
-                          {['tight', 'normal', 'loose', 'extra-loose'].map((spacing) => (
+                        <div className="grid grid-cols-3 gap-1">
+                          {['none', 'tight', 'normal', 'loose', 'extra-loose'].map((spacing) => (
                             <button
                               key={spacing}
                               type="button"
@@ -924,7 +926,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                                   : 'border-gray-200 text-gray-600 hover:border-gray-400'
                               }`}
                             >
-                              {spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : spacing === 'loose' ? '넓게' : '더 넓게'}
+                              {spacing === 'none' ? '없음' : spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : spacing === 'loose' ? '넓게' : '더 넓게'}
                             </button>
                           ))}
                         </div>
@@ -1453,7 +1455,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       const { layout, products: rowProducts } = row;
                       
                       // 간격 설정
-                      const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
+                      const gapClass = layout.spacing === 'none' ? 'gap-0' :
+                                     layout.spacing === 'tight' ? 'gap-2' : 
                                      layout.spacing === 'loose' ? 'gap-8' : 
                                      layout.spacing === 'extra-loose' ? 'gap-12' : 'gap-6';
                       
@@ -1712,7 +1715,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       const gridStyle = productsPerRow > 4 ? {
                         display: 'grid',
                         gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
-                        gap: design.product_spacing === 'tight' ? '0.5rem' :
+                        gap: design.product_spacing === 'none' ? '0' :
+                             design.product_spacing === 'tight' ? '0.5rem' :
                              design.product_spacing === 'loose' ? '2rem' :
                              design.product_spacing === 'extra-loose' ? '3rem' : '1.5rem'
                       } : {};

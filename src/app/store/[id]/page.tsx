@@ -86,7 +86,7 @@ type StoreDesign = {
   products_per_row?: number;
   enable_custom_rows?: boolean;
   // 상품 간격 설정 추가
-  product_spacing?: 'tight' | 'normal' | 'loose' | 'extra-loose';
+  product_spacing?: 'none' | 'tight' | 'normal' | 'loose' | 'extra-loose';
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -388,6 +388,7 @@ export default function StorePage() {
 
   const getProductSpacing = () => {
     switch (design.product_spacing) {
+      case 'none': return 'gap-0';
       case 'tight': return 'gap-2 md:gap-3';
       case 'normal': return 'gap-6 md:gap-8';
       case 'loose': return 'gap-8 md:gap-12';
@@ -648,7 +649,8 @@ export default function StorePage() {
                   const { layout, products: rowProducts } = row;
                   
                   // 간격 설정
-                  const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
+                  const gapClass = layout.spacing === 'none' ? 'gap-0' :
+                                 layout.spacing === 'tight' ? 'gap-2' : 
                                  layout.spacing === 'loose' ? 'gap-8' : 
                                  layout.spacing === 'extra-loose' ? 'gap-12' : 'gap-6';
                   
@@ -667,7 +669,11 @@ export default function StorePage() {
                   // 5개, 6개 컬럼을 위한 인라인 스타일
                   const gridStyle = layout.columns > 4 ? {
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`
+                    gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+                    gap: layout.spacing === 'none' ? '0' :
+                         layout.spacing === 'tight' ? '0.5rem' :
+                         layout.spacing === 'loose' ? '2rem' :
+                         layout.spacing === 'extra-loose' ? '3rem' : '1.5rem'
                   } : {};
                   
                   // 레이아웃 타입별 스타일
@@ -858,7 +864,8 @@ export default function StorePage() {
                   const gridStyle = productsPerRow > 4 ? {
                     display: 'grid',
                     gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
-                    gap: design.product_spacing === 'tight' ? '0.5rem' :
+                    gap: design.product_spacing === 'none' ? '0' :
+                         design.product_spacing === 'tight' ? '0.5rem' :
                          design.product_spacing === 'loose' ? '2rem' :
                          design.product_spacing === 'extra-loose' ? '3rem' : '1.5rem'
                   } : {};
