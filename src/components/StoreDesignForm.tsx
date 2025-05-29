@@ -192,9 +192,11 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             title_position_y: existingDesign.title_position_y || 40,
             description_position_x: existingDesign.description_position_x || 50,
             description_position_y: existingDesign.description_position_y || 60,
-            // 새로운 필드들 처리
+            // 새로운 필드들 처리 - 타입 변환 명시적 처리
             row_layouts: existingDesign.row_layouts || defaultDesign.row_layouts,
-            products_per_row: existingDesign.products_per_row || 4,
+            products_per_row: typeof existingDesign.products_per_row === 'string' 
+              ? parseInt(existingDesign.products_per_row) 
+              : (existingDesign.products_per_row || 4),
             enable_custom_rows: existingDesign.enable_custom_rows || false
           };
           setDesign(convertedDesign);
@@ -1670,8 +1672,12 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                         gap: '1.5rem'
                       } : {};
                       
+                      // 반응형 클래스 개선: 모바일에서도 적절한 컬럼 수 표시
+                      const mobileColumns = Math.min(productsPerRow, 2); // 모바일에서는 최대 2개
+                      const tabletColumns = Math.min(productsPerRow, 3); // 태블릿에서는 최대 3개
+                      
                       const gridClass = productsPerRow <= 4 
-                        ? `grid gap-6 md:gap-8 grid-cols-2 md:grid-cols-${productsPerRow}`
+                        ? `grid gap-6 md:gap-8 grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
                         : 'gap-6 md:gap-8';
                       
                       return (

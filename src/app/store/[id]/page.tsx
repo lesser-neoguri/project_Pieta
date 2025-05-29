@@ -185,7 +185,13 @@ export default function StorePage() {
             title_position_x: designData.title_position_x || 50,
             title_position_y: designData.title_position_y || 40,
             description_position_x: designData.description_position_x || 50,
-            description_position_y: designData.description_position_y || 60
+            description_position_y: designData.description_position_y || 60,
+            // 타입 변환 명시적 처리
+            products_per_row: typeof designData.products_per_row === 'string' 
+              ? parseInt(designData.products_per_row) 
+              : (designData.products_per_row || 4),
+            enable_custom_rows: designData.enable_custom_rows || false,
+            row_layouts: designData.row_layouts || {}
           };
           setDesign(convertedDesign);
         } else {
@@ -754,6 +760,10 @@ export default function StorePage() {
               (() => {
                 const productsPerRow = design.products_per_row || 4;
                 
+                // 디버깅 로그 추가
+                console.log('Debug - productsPerRow:', productsPerRow, 'type:', typeof productsPerRow);
+                console.log('Debug - design.products_per_row:', design.products_per_row, 'type:', typeof design.products_per_row);
+                
                 // layout_style에 따른 처리
                 if (design.layout_style === 'list') {
                   return (
@@ -834,8 +844,12 @@ export default function StorePage() {
                     gap: '1.5rem'
                   } : {};
                   
+                  // 반응형 클래스 개선: 모바일에서도 적절한 컬럼 수 표시
+                  const mobileColumns = Math.min(productsPerRow, 2); // 모바일에서는 최대 2개
+                  const tabletColumns = Math.min(productsPerRow, 3); // 태블릿에서는 최대 3개
+                  
                   const gridClass = productsPerRow <= 4 
-                    ? `grid gap-6 md:gap-8 grid-cols-2 md:grid-cols-${productsPerRow}`
+                    ? `grid gap-6 md:gap-8 grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
                     : 'gap-6 md:gap-8';
                   
                   return (
