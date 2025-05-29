@@ -17,6 +17,7 @@ type UserData = {
   is_active: boolean;
   created_at: string;
   name?: string;
+  deleted_at?: string;
 };
 
 type RegularUserData = {
@@ -54,6 +55,7 @@ export default function ProfileSidebar() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeletedAccount, setIsDeletedAccount] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -62,6 +64,34 @@ export default function ProfileSidebar() {
       try {
         setLoadingProfile(true);
         setError(null);
+        setIsDeletedAccount(false);
+
+        // 먼저 탈퇴한 사용자인지 확인
+        const { data: withdrawnUser, error: withdrawnError } = await supabase
+          .from('withdrawn_users')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
+
+        if (withdrawnUser) {
+          setIsDeletedAccount(true);
+          
+          // 탈퇴 후 30일 계산
+          const withdrawalDate = new Date(withdrawnUser.created_at);
+          const thirtyDaysAfterWithdrawal = new Date(withdrawalDate);
+          thirtyDaysAfterWithdrawal.setDate(withdrawalDate.getDate() + 30);
+          
+          const now = new Date();
+          const diffTime = thirtyDaysAfterWithdrawal.getTime() - now.getTime();
+          const remainingDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (remainingDays > 0) {
+            setError(`계정 삭제 요청된 상태입니다. ${remainingDays}일 후 완전 삭제됩니다. 계정 복구를 원하시면 복구 페이지를 이용해주세요.`);
+          } else {
+            setError('계정 삭제 요청된 상태입니다. 복구 기간이 만료되어 곧 완전 삭제됩니다.');
+          }
+          return;
+        }
 
         const { data: userData, error: userError } = await supabase
           .from('users')
@@ -69,8 +99,28 @@ export default function ProfileSidebar() {
           .eq('id', user.id)
           .single();
 
-        if (userError) throw userError;
-        if (!userData) throw new Error('사용자 정보를 찾을 수 없습니다.');
+        if (userError) {
+          // 사용자 정보가 없는 경우 (완전히 삭제된 계정)
+          if (userError.code === 'PGRST116') {
+            setIsDeletedAccount(true);
+            setError('완전 삭제된 계정입니다. 새로운 계정으로 가입해주세요.');
+            return;
+          }
+          throw userError;
+        }
+
+        if (!userData) {
+          setIsDeletedAccount(true);
+          setError('사용자 정보를 찾을 수 없습니다. 삭제된 계정일 수 있습니다.');
+          return;
+        }
+
+        // 소프트 삭제된 계정인지 확인
+        if (userData.deleted_at) {
+          setIsDeletedAccount(true);
+          setError('소프트 삭제된 계정입니다. 새로운 계정으로 가입해주세요.');
+          return;
+        }
 
         setUserData(userData as UserData);
         
@@ -81,7 +131,9 @@ export default function ProfileSidebar() {
             .eq('user_id', user.id)
             .single();
             
-          if (regularError) throw regularError;
+          if (regularError && regularError.code !== 'PGRST116') {
+            throw regularError;
+          }
           setRegularUserData(regularData as RegularUserData);
         } else if (userData.user_type === 'vendor') {
           const { data: vendorData, error: vendorError } = await supabase
@@ -90,7 +142,9 @@ export default function ProfileSidebar() {
             .eq('user_id', user.id)
             .single();
             
-          if (vendorError) throw vendorError;
+          if (vendorError && vendorError.code !== 'PGRST116') {
+            throw vendorError;
+          }
           setVendorUserData(vendorData as VendorUserData);
         }
       } catch (error: any) {
@@ -119,7 +173,7 @@ export default function ProfileSidebar() {
 
       // 회원 탈퇴 함수 호출 (DB에 설정된 RPC 함수)
       const { data, error } = await supabase
-        .rpc('delete_user_account');
+        .rpc('delete_user_account_v2');
 
       if (error) throw error;
 
@@ -134,6 +188,152 @@ export default function ProfileSidebar() {
   };
 
   if (!isProfileOpen) return null;
+
+  // 삭제된 계정에 대한 특별한 UI
+  const deletedAccountContent = (
+    <>
+      {/* 헤더 */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <button
+          onClick={closeProfile}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* 삭제된 계정 안내 */}
+      <div className="overflow-y-auto h-[calc(100vh-64px)] px-6 py-8">
+        <div className="space-y-8">
+          <div className="text-center">
+            <div className="w-24 h-24 mx-auto rounded-full bg-red-100 flex items-center justify-center mb-4">
+              <svg className="w-12 h-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-medium mb-2 text-red-600">계정 삭제 요청됨</h1>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-800 text-sm font-medium mb-2">⚠️ 중요 알림</p>
+              <p className="text-red-700 text-sm leading-relaxed">{error}</p>
+            </div>
+          </div>
+
+          {/* 계정 상태 정보 */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-gray-800 mb-3">계정 상태 정보</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">계정 상태:</span>
+                <span className="text-red-600 font-medium">
+                  {error?.includes('소프트 삭제') ? '소프트 삭제됨' : 
+                   error?.includes('완전 삭제') ? '완전 삭제됨' : '삭제 요청됨'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">이메일:</span>
+                <span className="text-gray-800">{user?.email}</span>
+              </div>
+              {error?.includes('일 후') && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">완전 삭제까지:</span>
+                  <span className="text-orange-600 font-medium">
+                    {error.match(/(\d+)일 후/)?.[1]}일 남음
+                  </span>
+                </div>
+              )}
+              {error?.includes('소프트 삭제') && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">복구 가능:</span>
+                  <span className="text-green-600 font-medium">예</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 안내 메시지 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-blue-800 mb-2">계정 복구 안내</h3>
+            <div className="text-sm text-blue-700 space-y-2">
+              {error?.includes('일 후') ? (
+                <>
+                  <p>• 계정 삭제 요청 후 30일 이내에 복구 가능합니다.</p>
+                  <p>• 복구 기간이 지나면 모든 데이터가 영구적으로 삭제됩니다.</p>
+                  <p>• 복구를 원하시면 아래 버튼을 클릭해주세요.</p>
+                </>
+              ) : error?.includes('소프트 삭제') ? (
+                <>
+                  <p>• 소프트 삭제된 계정은 복구가 가능합니다.</p>
+                  <p>• 기존 비밀번호로 계정을 복구할 수 있습니다.</p>
+                  <p>• 복구를 원하시면 아래 버튼을 클릭해주세요.</p>
+                </>
+              ) : (
+                <>
+                  <p>• 삭제된 계정의 복구를 시도해볼 수 있습니다.</p>
+                  <p>• 복구 가능 여부는 계정 상태에 따라 다릅니다.</p>
+                  <p>• 복구를 원하시면 아래 버튼을 클릭해주세요.</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {error?.includes('일 후') ? (
+              <>
+                <Link 
+                  href={`/account/reactivate?email=${encodeURIComponent(user?.email || '')}`}
+                  className="block w-full text-center px-4 py-3 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                >
+                  계정 복구하기
+                </Link>
+                
+                <Link 
+                  href="/signup" 
+                  className="block w-full text-center px-4 py-3 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 transition-colors"
+                >
+                  새 계정으로 가입하기
+                </Link>
+              </>
+            ) : error?.includes('완전 삭제') ? (
+              <Link 
+                href="/signup" 
+                className="block w-full text-center px-4 py-3 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+              >
+                새 계정으로 가입하기
+              </Link>
+            ) : (
+              <>
+                <Link 
+                  href={`/account/reactivate?email=${encodeURIComponent(user?.email || '')}`}
+                  className="block w-full text-center px-4 py-3 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                >
+                  계정 복구 시도하기
+                </Link>
+                
+                <Link 
+                  href="/signup" 
+                  className="block w-full text-center px-4 py-3 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50 transition-colors"
+                >
+                  새 계정으로 가입하기
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* 로그아웃 버튼 */}
+          <div className="pt-4 border-t border-gray-200">
+            <button
+              onClick={signOut}
+              className="w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-700 transition-colors"
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 
   const sidebarContent = userData ? (
     <>
@@ -316,9 +516,11 @@ export default function ProfileSidebar() {
                   )}
                 </div>
 
-                {vendorUserData.status === 'approved' && user && (
+                {vendorUserData.status === 'approved' && (
                   <button
                     onClick={async () => {
+                      if (!user) return;
+                      
                       const { data: storeData, error: storeError } = await supabase
                         .from('stores')
                         .select('id')
@@ -495,7 +697,8 @@ export default function ProfileSidebar() {
     );
   }
 
-  if (error) {
+  // 오류가 있거나 삭제된 계정인 경우에도 로그아웃 버튼을 포함한 UI 표시
+  if (error || isDeletedAccount) {
     return (
       <div 
         className={`fixed inset-0 z-50 ${
@@ -513,17 +716,7 @@ export default function ProfileSidebar() {
             isProfileOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="text-black hover:underline"
-              >
-                다시 시도
-              </button>
-            </div>
-          </div>
+          {deletedAccountContent}
         </div>
       </div>
     );

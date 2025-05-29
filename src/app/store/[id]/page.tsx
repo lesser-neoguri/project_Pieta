@@ -167,11 +167,6 @@ export default function StorePage() {
         }
 
         setStore(storeData);
-        
-        // 현재 사용자가 상점 소유자인지 확인
-        if (user && user.id === storeData.vendor_id) {
-          setIsOwner(true);
-        }
 
         // 상점 디자인 설정 가져오기
         const { data: designData, error: designError } = await supabase
@@ -206,9 +201,20 @@ export default function StorePage() {
               }
             })(),
             // 타입 변환 명시적 처리
-            products_per_row: typeof designData.products_per_row === 'string' 
-              ? parseInt(designData.products_per_row) 
-              : (designData.products_per_row || 4),
+            products_per_row: (() => {
+              console.log('Raw products_per_row from DB:', designData.products_per_row, 'type:', typeof designData.products_per_row);
+              if (typeof designData.products_per_row === 'string') {
+                const parsed = parseInt(designData.products_per_row);
+                console.log('Parsed products_per_row:', parsed);
+                return parsed;
+              } else if (typeof designData.products_per_row === 'number') {
+                console.log('Using number products_per_row:', designData.products_per_row);
+                return designData.products_per_row;
+              } else {
+                console.log('Using default products_per_row: 4');
+                return 4;
+              }
+            })(),
             enable_custom_rows: designData.enable_custom_rows || false,
             row_layouts: (() => {
               try {
@@ -226,8 +232,11 @@ export default function StorePage() {
             })(),
             product_spacing: designData.product_spacing || 'normal'
           };
+          console.log('Loaded design data:', convertedDesign);
+          console.log('Final products_per_row:', convertedDesign.products_per_row, 'type:', typeof convertedDesign.products_per_row);
           setDesign(convertedDesign);
         } else {
+          console.log('No design data found, using default design');
           setDesign({ ...defaultDesign, store_id: storeId });
         }
 
@@ -253,7 +262,16 @@ export default function StorePage() {
     };
 
     fetchStoreAndProducts();
-  }, [storeId, user]);
+  }, [storeId]);
+
+  // 사용자 권한 확인을 별도 useEffect로 분리
+  useEffect(() => {
+    if (user && store && user.id === store.vendor_id) {
+      setIsOwner(true);
+    } else {
+      setIsOwner(false);
+    }
+  }, [user, store]);
 
   // 제품 이미지 삭제 함수
   const handleRemoveImage = async (imageUrl: string) => {
@@ -602,19 +620,33 @@ export default function StorePage() {
           </div>
           
           {/* 정렬 옵션 */}
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-500 uppercase tracking-wider">정렬</span>
-            <select 
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-2xl font-light tracking-wide" style={{ color: design.text_color }}>
+              제품 ({products.length}개)
+            </h2>
+            
+            <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="border-none bg-transparent text-sm font-medium uppercase tracking-wider cursor-pointer" 
-              style={{ color: design.text_color }}
+              className="border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
             >
               <option value="newest">최신순</option>
-              <option value="price_asc">가격 낮은순</option>
-              <option value="price_desc">가격 높은순</option>
-              <option value="rating">평점순</option>
+              <option value="oldest">오래된순</option>
+              <option value="price-low">가격 낮은순</option>
+              <option value="price-high">가격 높은순</option>
+              <option value="name">이름순</option>
             </select>
+          </div>
+
+          {/* 디버깅 정보 표시 */}
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+            <div className="font-semibold text-yellow-800 mb-2">디자인 설정 정보:</div>
+            <div className="text-yellow-700 space-y-1">
+              <div>products_per_row: {design.products_per_row} (타입: {typeof design.products_per_row})</div>
+              <div>layout_style: {design.layout_style}</div>
+              <div>product_spacing: {design.product_spacing}</div>
+              <div>enable_custom_rows: {design.enable_custom_rows ? 'true' : 'false'}</div>
+            </div>
           </div>
         </div>
 
@@ -810,10 +842,6 @@ export default function StorePage() {
               (() => {
                 const productsPerRow = design.products_per_row || 4;
                 
-                // 디버깅 로그 추가
-                console.log('Debug - productsPerRow:', productsPerRow, 'type:', typeof productsPerRow);
-                console.log('Debug - design.products_per_row:', design.products_per_row, 'type:', typeof design.products_per_row);
-                
                 // layout_style에 따른 처리
                 if (design.layout_style === 'list') {
                   return (
@@ -888,28 +916,21 @@ export default function StorePage() {
                   );
                 } else {
                   // grid 레이아웃 (기본)
-                  const gridStyle = productsPerRow > 4 ? {
+                  // 인라인 스타일로 확실한 적용 보장
+                  const gridStyle = {
                     display: 'grid',
                     gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
                     gap: design.product_spacing === 'none' ? '0' :
                          design.product_spacing === 'tight' ? '0.5rem' :
                          design.product_spacing === 'loose' ? '2rem' :
                          design.product_spacing === 'extra-loose' ? '3rem' : '1.5rem'
-                  } : {};
+                  };
                   
-                  // 반응형 클래스 개선: 모바일에서도 적절한 컬럼 수 표시
-                  const mobileColumns = Math.min(productsPerRow, 2); // 모바일에서는 최대 2개
-                  const tabletColumns = Math.min(productsPerRow, 3); // 태블릿에서는 최대 3개
-                  
-                  const gridClass = productsPerRow <= 4 
-                    ? `grid ${getProductSpacing()} grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
-                    : getProductSpacing();
-                  
+                  console.log('Grid Style Applied:', gridStyle);
+                  console.log('Products per row:', productsPerRow);
+
                   return (
-                    <div 
-                      className={gridClass}
-                      style={gridStyle}
-                    >
+                    <div style={gridStyle}>
                       {/* 제품 등록 카드 */}
                       {isOwner && (
                         <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
@@ -931,7 +952,7 @@ export default function StorePage() {
                         <ProductCard
                           key={product.id}
                           product={product as ProductCardData}
-                          variant="compact"
+                          variant={design.product_card_style as any}
                           showRating={true}
                           showActions={isOwner}
                           isOwner={isOwner}

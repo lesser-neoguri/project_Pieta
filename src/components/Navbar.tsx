@@ -35,7 +35,7 @@ const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathn
 }), { ssr: false });
 
 export default function Navbar() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isDeletedAccount, deletedAccountInfo } = useAuth();
   const { openProfile } = useProfile();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
@@ -266,13 +266,20 @@ export default function Navbar() {
                   </Link>
                   <button
                     onClick={openProfile}
-                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'} relative`}
                     aria-label="프로필"
-                    title="프로필"
+                    title={isDeletedAccount 
+                      ? `삭제된 계정 - ${deletedAccountInfo.message || '프로필 확인 필요'}` 
+                      : "프로필"}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5 md:h-5 md:w-5 lg:h-6 lg:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
+                    {isDeletedAccount && (
+                      <span className="absolute top-0 right-0 inline-flex items-center justify-center w-3 h-3 text-xs font-bold leading-none text-white transform translate-x-1/4 -translate-y-1/4 bg-red-500 rounded-full">
+                        !
+                      </span>
+                    )}
                   </button>
                 </div>
               ) : (

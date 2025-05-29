@@ -25,9 +25,12 @@ export default function SignupForm({ userType }: SignupFormProps) {
     password: '',
     confirmPassword: '',
     businessNumber: '',
+    email: '',
   });
 
   const [loading, setLoading] = useState(false);
+  const [emailChecking, setEmailChecking] = useState(false);
+  const [emailValid, setEmailValid] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const validatePassword = (password: string) => {
@@ -53,19 +56,24 @@ export default function SignupForm({ userType }: SignupFormProps) {
     setLoading(true);
     setMessage(null);
 
+    // 유효성 검사
     const passwordError = validatePassword(formData.password);
     const confirmPasswordError = formData.password !== formData.confirmPassword 
       ? '비밀번호가 일치하지 않습니다.' 
       : '';
     const businessNumberError = userType !== 'regular' ? validateBusinessNumber(formData.businessNumber) : '';
+    
+    // 이메일 중복 검사 (제출 시 최종 확인)
+    const emailError = await checkEmailDuplicate(formData.email);
 
     setErrors({
       password: passwordError,
       confirmPassword: confirmPasswordError,
       businessNumber: businessNumberError,
+      email: emailError,
     });
 
-    if (passwordError || confirmPasswordError || businessNumberError) {
+    if (passwordError || confirmPasswordError || businessNumberError || emailError) {
       setLoading(false);
       return;
     }
@@ -82,7 +90,18 @@ export default function SignupForm({ userType }: SignupFormProps) {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        // Supabase Auth 오류 처리
+        if (authError.message.includes('already registered')) {
+          setErrors(prev => ({
+            ...prev,
+            email: '이미 등록된 이메일입니다.'
+          }));
+          setLoading(false);
+          return;
+        }
+        throw authError;
+      }
 
       if (authData.user) {
         const userData = {
@@ -100,7 +119,17 @@ export default function SignupForm({ userType }: SignupFormProps) {
           .from('users')
           .insert([userData]);
 
-        if (profileError) throw profileError;
+        if (profileError) {
+          // 프로필 생성 실패 시 Auth 사용자도 삭제
+          if (authData.user.id) {
+            try {
+              await supabase.auth.admin.deleteUser(authData.user.id);
+            } catch (deleteError) {
+              console.error('Auth 사용자 삭제 실패:', deleteError);
+            }
+          }
+          throw profileError;
+        }
       }
 
       setMessage({
@@ -149,6 +178,87 @@ export default function SignupForm({ userType }: SignupFormProps) {
       setErrors(prev => ({
         ...prev,
         businessNumber: validateBusinessNumber(value)
+      }));
+    } else if (name === 'email') {
+      // 이메일 입력 시 기존 에러 메시지 및 유효성 상태 제거
+      setErrors(prev => ({
+        ...prev,
+        email: ''
+      }));
+      setEmailValid(false);
+    }
+  };
+
+  // 이메일 중복 검사 함수
+  const checkEmailDuplicate = async (email: string) => {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailValid(false);
+      return '';
+    }
+
+    setEmailChecking(true);
+    setEmailValid(false);
+    
+    try {
+      // 1. users 테이블에서 확인 (현재 활성 사용자)
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('email')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (userData) {
+        return '이미 사용 중인 이메일입니다.';
+      }
+
+      // 2. withdrawn_users 테이블에서 확인 (탈퇴한 계정)
+      // original_email 컬럼이 있다면 그것도 확인
+      const { data: withdrawnUser } = await supabase
+        .from('withdrawn_users')
+        .select('email, original_email')
+        .or(`email.eq.${email.toLowerCase()},original_email.eq.${email.toLowerCase()}`)
+        .single();
+
+      if (withdrawnUser) {
+        return '탈퇴한 계정의 이메일입니다. 계정 복구를 원하시면 복구 페이지를 이용해주세요.';
+      }
+
+      // 3. Supabase Auth에서도 확인 (추가 보안)
+      try {
+        const { data: authUsers } = await supabase.auth.admin.listUsers();
+        const existingAuthUser = authUsers.users?.find(user => 
+          user.email?.toLowerCase() === email.toLowerCase()
+        );
+        
+        if (existingAuthUser) {
+          return '이미 등록된 이메일입니다.';
+        }
+      } catch (authError) {
+        // Auth 확인 실패 시 무시 (권한 문제일 수 있음)
+        console.log('Auth 사용자 확인 중 오류 (무시됨):', authError);
+      }
+
+      // 모든 검사를 통과하면 사용 가능한 이메일
+      setEmailValid(true);
+      return '';
+    } catch (error) {
+      console.error('이메일 중복 검사 오류:', error);
+      // 오류 발생 시에도 가입을 막지 않음 (서버에서 최종 검증)
+      setEmailValid(false);
+      return '';
+    } finally {
+      setEmailChecking(false);
+    }
+  };
+
+  // 이메일 중복 검사 핸들러
+  const handleEmailBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const email = e.target.value;
+    if (email) {
+      const emailError = await checkEmailDuplicate(email);
+      setErrors(prev => ({
+        ...prev,
+        email: emailError
       }));
     }
   };
@@ -240,16 +350,58 @@ export default function SignupForm({ userType }: SignupFormProps) {
               <label htmlFor="email" className={labelStyle}>
                 이메일
               </label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                className={inputStyle}
-                value={formData.email}
-                onChange={handleChange}
-              />
+              <div className="relative">
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className={`${inputStyle} ${
+                    errors.email 
+                      ? 'border-red-500 focus:border-red-500' 
+                      : emailValid 
+                        ? 'border-green-500 focus:border-green-500' 
+                        : ''
+                  }`}
+                  value={formData.email}
+                  onChange={handleChange}
+                  onBlur={handleEmailBlur}
+                />
+                <div className="absolute right-0 top-3">
+                  {emailChecking && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                  )}
+                  {!emailChecking && emailValid && !errors.email && (
+                    <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {!emailChecking && errors.email && (
+                    <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              {errors.email && (
+                <p className={`${errorStyle} ${errors.email.includes('탈퇴한 계정') ? 'text-orange-600' : ''}`}>
+                  {errors.email}
+                  {errors.email.includes('탈퇴한 계정') && (
+                    <Link 
+                      href="/account/reactivate" 
+                      className="ml-2 text-blue-600 hover:text-blue-700 underline"
+                    >
+                      복구하기
+                    </Link>
+                  )}
+                </p>
+              )}
+              {!errors.email && emailValid && (
+                <p className="mt-2 text-xs text-green-600 tracking-wide">
+                  사용 가능한 이메일입니다.
+                </p>
+              )}
             </div>
 
             <div>
@@ -307,10 +459,10 @@ export default function SignupForm({ userType }: SignupFormProps) {
           <div className="pt-6">
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-4 px-4 border border-black bg-black text-white hover:bg-white hover:text-black transition-colors duration-200 text-sm uppercase tracking-widest font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={loading || emailChecking || (formData.email && !emailValid)}
+              className="w-full py-4 px-4 border border-black bg-black text-white hover:bg-white hover:text-black transition-colors duration-200 text-sm uppercase tracking-widest font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-black disabled:hover:text-white"
             >
-              {loading ? '처리 중...' : '가입하기'}
+              {loading ? '처리 중...' : emailChecking ? '이메일 확인 중...' : '가입하기'}
             </button>
           </div>
         </form>

@@ -20,17 +20,33 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
+    console.log('🔐 로그인 시도:', formData.email);
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password,
       });
 
-      if (error) throw error;
+      console.log('🔐 로그인 응답:', { data, error });
 
+      if (error) {
+        console.log('❌ 로그인 실패:', error.message);
+        // 로그인 실패 시 일반적인 오류 메시지만 표시
+        if (error.message.includes('Invalid login credentials')) {
+          setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+        } else {
+          setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+        }
+        return;
+      }
+
+      console.log('✅ 로그인 성공! 메인 페이지로 이동합니다.');
+      // 로그인 성공 시 메인 페이지로 이동
       router.push('/');
     } catch (error: any) {
-      setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      console.log('💥 로그인 예외 발생:', error);
+      setError('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
@@ -92,35 +108,39 @@ export default function LoginPage() {
 
           {error && (
             <div className="text-sm text-red-600 text-center">
-              {error}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start space-x-2">
+                  <svg className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-red-800 font-medium text-left">{error}</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="pt-6">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 px-4 border border-black bg-black text-white hover:bg-white hover:text-black transition-colors duration-200 text-sm uppercase tracking-widest font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? '로그인 중...' : '로그인'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-black text-white py-3 px-4 text-sm font-medium tracking-widest uppercase hover:bg-gray-900 transition-colors disabled:bg-gray-400"
+          >
+            {loading ? '로그인 중...' : '로그인'}
+          </button>
         </form>
 
-        <div className="mt-12 space-y-4 text-center">
-          <Link 
-            href="/forgot-password"
-            className="block text-xs text-gray-500 hover:text-black uppercase tracking-widest transition-colors"
-          >
-            비밀번호를 잊으셨나요?
-          </Link>
+        <div className="mt-8 text-center space-y-4">
           <div className="text-sm text-gray-500">
             계정이 없으신가요?{' '}
-            <Link 
-              href="/signup"
-              className="text-black hover:opacity-70 transition-opacity"
-            >
+            <Link href="/signup" className="text-black hover:underline">
               회원가입
+            </Link>
+          </div>
+          
+          <div className="text-sm text-gray-500">
+            <Link href="/account/reactivate" className="text-gray-600 hover:text-black">
+              삭제된 계정 복구하기
             </Link>
           </div>
         </div>
