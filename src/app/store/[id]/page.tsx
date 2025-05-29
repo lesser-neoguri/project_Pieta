@@ -70,6 +70,21 @@ type StoreDesign = {
     titleWeight: string;
     descriptionWeight: string;
   };
+  // 각 층별 레이아웃 설정
+  row_layouts?: {
+    [rowIndex: number]: {
+      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner';
+      columns: number;
+      card_style: 'default' | 'compact' | 'detailed' | 'large';
+      spacing: 'tight' | 'normal' | 'loose';
+      height_ratio?: 'square' | 'portrait' | 'landscape' | 'auto';
+      show_text_overlay?: boolean;
+      background_color?: string;
+      text_alignment?: 'left' | 'center' | 'right';
+    };
+  };
+  products_per_row?: number;
+  enable_custom_rows?: boolean;
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -578,42 +593,202 @@ export default function StorePage() {
             )}
           </div>
         ) : (
-          <div className={`grid gap-6 md:gap-8 ${
-            design.layout_style === 'grid' 
-              ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' 
-              : design.layout_style === 'list'
-              ? 'grid-cols-1'
-              : 'grid-cols-2 md:grid-cols-3'
-          }`}>
-            {/* 제품 등록 카드 */}
-            {isOwner && (
-              <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
-                <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
-                  <div className="text-center">
-                    <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
-                      제품 등록
-                    </span>
-                  </div>
-                </div>
-              </Link>
+          <div className="space-y-8">
+            {design.enable_custom_rows ? (
+              // 커스텀 행 레이아웃
+              (() => {
+                const allProducts = [
+                  // 제품 등록 카드를 첫 번째에 추가 (소유자인 경우만)
+                  ...(isOwner ? [{ id: 'add-product', isAddCard: true }] : []),
+                  ...sortedProducts
+                ];
+
+                const rowLayouts = design.row_layouts || {};
+                const rows: any[] = [];
+                let productIndex = 0;
+
+                // 각 행별로 제품 배치
+                Object.entries(rowLayouts).forEach(([rowIndexStr, rowLayout]) => {
+                  const rowIndex = parseInt(rowIndexStr);
+                  const productsInRow = allProducts.slice(productIndex, productIndex + rowLayout.columns);
+                  
+                  if (productsInRow.length > 0) {
+                    rows.push({
+                      index: rowIndex,
+                      layout: rowLayout,
+                      products: productsInRow
+                    });
+                    productIndex += rowLayout.columns;
+                  }
+                });
+
+                return rows.map((row) => {
+                  const { layout, products: rowProducts } = row;
+                  
+                  // 간격 설정
+                  const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
+                                 layout.spacing === 'loose' ? 'gap-8' : 'gap-6';
+                  
+                  // 높이 비율 설정
+                  const aspectClass = layout.height_ratio === 'portrait' ? 'aspect-[3/4]' :
+                                     layout.height_ratio === 'landscape' ? 'aspect-[4/3]' :
+                                     layout.height_ratio === 'auto' ? '' : 'aspect-square';
+                  
+                  // 컬럼 설정
+                  const gridCols = layout.columns <= 4 
+                    ? `grid-cols-${layout.columns}` 
+                    : layout.columns === 5 
+                    ? 'grid-cols-5' 
+                    : 'grid-cols-6';
+                  
+                  // 5개, 6개 컬럼을 위한 인라인 스타일
+                  const gridStyle = layout.columns > 4 ? {
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`
+                  } : {};
+                  
+                  // 레이아웃 타입별 스타일
+                  let containerClass = '';
+                  let cardClass = '';
+                  
+                  switch (layout.layout_type) {
+                    case 'featured':
+                      containerClass = `grid ${gridCols} ${gapClass}`;
+                      cardClass = layout.card_style === 'large' ? 'transform hover:scale-105' : '';
+                      break;
+                    case 'banner':
+                      containerClass = `grid ${gridCols} ${gapClass}`;
+                      cardClass = 'relative overflow-hidden';
+                      break;
+                    case 'masonry':
+                      containerClass = `columns-${layout.columns} ${gapClass}`;
+                      cardClass = 'break-inside-avoid mb-6';
+                      break;
+                    case 'list':
+                      containerClass = 'space-y-4';
+                      cardClass = 'flex items-center space-x-4';
+                      break;
+                    default:
+                      containerClass = `grid ${gridCols} ${gapClass}`;
+                  }
+
+                  return (
+                    <div 
+                      key={row.index} 
+                      className={`${containerClass} transition-all duration-300`}
+                      style={{ backgroundColor: layout.background_color, ...gridStyle }}
+                    >
+                      {rowProducts.map((product: any) => {
+                        if (product.isAddCard) {
+                          return (
+                            <Link key="add-product" href={`/store/${store.id}/product/create`} className={`group cursor-pointer ${cardClass}`}>
+                              <div className={`bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center ${aspectClass || 'aspect-square'}`}>
+                                <div className={`text-center ${layout.text_alignment === 'center' ? 'text-center' : layout.text_alignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                  <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                                    제품 등록
+                                  </span>
+                                </div>
+                              </div>
+                            </Link>
+                          );
+                        }
+
+                        if (layout.layout_type === 'list') {
+                          return (
+                            <Link key={product.id} href={`/store/${store.id}/product/${product.id}`} className={`${cardClass} p-4 border border-gray-200 hover:shadow-lg transition-shadow`}>
+                              <div className="w-24 h-24 bg-gray-100 flex-shrink-0">
+                                {product.product_image_url ? (
+                                  <img src={product.product_image_url} alt={product.product_name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                    <span className="text-gray-400 text-xs">No Image</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className={`flex-1 ${layout.text_alignment === 'center' ? 'text-center' : layout.text_alignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                <h3 className="font-medium text-gray-900 mb-1">{product.product_name}</h3>
+                                <p className="text-lg font-light text-gray-900">
+                                  {product.discount_percentage ? (
+                                    <>
+                                      <span className="line-through text-gray-500 text-sm mr-2">
+                                        ₩{product.price.toLocaleString()}
+                                      </span>
+                                      <span className="text-red-600">
+                                        ₩{Math.round(product.price * (1 - product.discount_percentage / 100)).toLocaleString()}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    `₩${product.price.toLocaleString()}`
+                                  )}
+                                </p>
+                              </div>
+                            </Link>
+                          );
+                        }
+
+                        return (
+                          <div key={product.id} className={cardClass}>
+                            <ProductCard
+                              product={product as ProductCardData}
+                              variant={layout.card_style as any}
+                              showRating={true}
+                              showActions={isOwner}
+                              isOwner={isOwner}
+                              onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                              onDelete={() => setDeleteProductId(product.id)}
+                              customAspectRatio={aspectClass}
+                              textAlignment={layout.text_alignment}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                });
+              })()
+            ) : (
+              // 기본 레이아웃
+              <div className={`grid gap-6 md:gap-8 ${
+                design.layout_style === 'grid' 
+                  ? `grid-cols-2 md:grid-cols-${Math.min(design.products_per_row || 4, 6)}` 
+                  : design.layout_style === 'list'
+                  ? 'grid-cols-1'
+                  : 'grid-cols-2 md:grid-cols-3'
+              }`}>
+                {/* 제품 등록 카드 */}
+                {isOwner && (
+                  <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
+                    <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                      <div className="text-center">
+                        <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                          제품 등록
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                )}
+                
+                {/* 실제 제품 카드들 */}
+                {sortedProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product as ProductCardData}
+                    variant={design.product_card_style as any}
+                    showRating={true}
+                    showActions={isOwner}
+                    isOwner={isOwner}
+                    onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                    onDelete={() => setDeleteProductId(product.id)}
+                  />
+                ))}
+              </div>
             )}
-            
-            {/* 실제 제품 카드들 */}
-            {sortedProducts.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product as ProductCardData}
-                variant={design.product_card_style as any}
-                showRating={true}
-                showActions={isOwner}
-                isOwner={isOwner}
-                onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
-                onDelete={() => setDeleteProductId(product.id)}
-              />
-            ))}
           </div>
         )}
       </div>

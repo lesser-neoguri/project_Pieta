@@ -39,6 +39,21 @@ type StoreDesign = {
     titleWeight: string;
     descriptionWeight: string;
   };
+  // 각 층별 레이아웃 설정
+  row_layouts?: {
+    [rowIndex: number]: {
+      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner';
+      columns: number; // 1-6 컬럼
+      card_style: 'default' | 'compact' | 'detailed' | 'large';
+      spacing: 'tight' | 'normal' | 'loose';
+      height_ratio?: 'square' | 'portrait' | 'landscape' | 'auto';
+      show_text_overlay?: boolean;
+      background_color?: string;
+      text_alignment?: 'left' | 'center' | 'right';
+    };
+  };
+  products_per_row?: number; // 기본 행당 제품 수
+  enable_custom_rows?: boolean; // 커스텀 행 레이아웃 활성화
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -70,7 +85,37 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
     descriptionSize: 'medium',
     titleWeight: 'normal',
     descriptionWeight: 'normal'
-  }
+  },
+  // 새로운 기본값들
+  row_layouts: {
+    0: {
+      layout_type: 'featured',
+      columns: 1,
+      card_style: 'large',
+      spacing: 'normal',
+      height_ratio: 'landscape',
+      show_text_overlay: true,
+      text_alignment: 'center'
+    },
+    1: {
+      layout_type: 'grid',
+      columns: 4,
+      card_style: 'default',
+      spacing: 'normal',
+      height_ratio: 'square',
+      text_alignment: 'left'
+    },
+    2: {
+      layout_type: 'grid',
+      columns: 3,
+      card_style: 'detailed',
+      spacing: 'loose',
+      height_ratio: 'portrait',
+      text_alignment: 'center'
+    }
+  },
+  products_per_row: 4,
+  enable_custom_rows: false
 };
 
 export default function StoreDesignForm({ storeId }: { storeId: string }) {
@@ -146,7 +191,11 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             title_position_x: existingDesign.title_position_x || 50,
             title_position_y: existingDesign.title_position_y || 40,
             description_position_x: existingDesign.description_position_x || 50,
-            description_position_y: existingDesign.description_position_y || 60
+            description_position_y: existingDesign.description_position_y || 60,
+            // 새로운 필드들 처리
+            row_layouts: existingDesign.row_layouts || defaultDesign.row_layouts,
+            products_per_row: existingDesign.products_per_row || 4,
+            enable_custom_rows: existingDesign.enable_custom_rows || false
           };
           setDesign(convertedDesign);
         } else {
@@ -202,7 +251,11 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
         title_position_y: design.title_position_y,
         description_position_x: design.description_position_x,
         description_position_y: design.description_position_y,
-        text_overlay_settings: design.text_overlay_settings
+        text_overlay_settings: design.text_overlay_settings,
+        // 새로운 필드들 추가
+        row_layouts: design.row_layouts || {},
+        products_per_row: design.products_per_row || 4,
+        enable_custom_rows: design.enable_custom_rows || false
       };
 
       let result;
@@ -595,27 +648,301 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 </select>
               </div>
               
+              {/* 커스텀 행 레이아웃 활성화 */}
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  제품 레이아웃
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={design.enable_custom_rows || false}
+                    onChange={(e) => updateDesign('enable_custom_rows', e.target.checked)}
+                    className="w-3 h-3 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
+                  />
+                  <span className="ml-2 text-xs text-gray-700 uppercase tracking-wide">
+                    각 층별 레이아웃 설정
+                  </span>
                 </label>
-                <div className="grid grid-cols-3 gap-1">
-                  {['grid', 'list', 'masonry'].map((style) => (
-                    <button
-                      key={style}
-                      type="button"
-                      onClick={() => updateDesign('layout_style', style)}
-                      className={`p-2 border text-xs uppercase transition-all ${
-                        design.layout_style === style
-                          ? 'border-gray-900 bg-gray-900 text-white'
-                          : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                      }`}
+              </div>
+
+              {/* 기본 레이아웃 설정 (커스텀 행이 비활성화된 경우) */}
+              {!design.enable_custom_rows && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                      제품 레이아웃
+                    </label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {['grid', 'list', 'masonry'].map((style) => (
+                        <button
+                          key={style}
+                          type="button"
+                          onClick={() => updateDesign('layout_style', style)}
+                          className={`p-2 border text-xs uppercase transition-all ${
+                            design.layout_style === style
+                              ? 'border-gray-900 bg-gray-900 text-white'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          {style}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                      행당 제품 수
+                    </label>
+                    <select
+                      value={design.products_per_row || 4}
+                      onChange={(e) => updateDesign('products_per_row', parseInt(e.target.value))}
+                      className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
                     >
-                      {style}
+                      <option value={2}>2개</option>
+                      <option value={3}>3개</option>
+                      <option value={4}>4개</option>
+                      <option value={5}>5개</option>
+                      <option value={6}>6개</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* 커스텀 행 레이아웃 설정 */}
+              {design.enable_custom_rows && (
+                <div className="space-y-4">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-3">
+                    각 층별 레이아웃 설정
+                  </div>
+                  
+                  {/* 행 추가/제거 버튼 */}
+                  <div className="flex space-x-2 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentLayouts = design.row_layouts || {};
+                        const newRowIndex = Object.keys(currentLayouts).length;
+                        updateDesign('row_layouts', {
+                          ...currentLayouts,
+                          [newRowIndex]: {
+                            layout_type: 'grid',
+                            columns: 4,
+                            card_style: 'default',
+                            spacing: 'normal',
+                            height_ratio: 'square',
+                            text_alignment: 'left'
+                          }
+                        });
+                      }}
+                      className="px-3 py-1 text-xs border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors uppercase tracking-wide"
+                    >
+                      + 행 추가
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentLayouts = design.row_layouts || {};
+                        const keys = Object.keys(currentLayouts);
+                        if (keys.length > 1) {
+                          const lastKey = keys[keys.length - 1];
+                          const newLayouts = { ...currentLayouts };
+                          delete newLayouts[parseInt(lastKey)];
+                          updateDesign('row_layouts', newLayouts);
+                        }
+                      }}
+                      className="px-3 py-1 text-xs border border-red-300 text-red-600 hover:border-red-400 hover:text-red-800 transition-colors uppercase tracking-wide"
+                    >
+                      - 행 제거
+                    </button>
+                  </div>
+
+                  {/* 각 행 설정 */}
+                  {Object.entries(design.row_layouts || {}).map(([rowIndex, rowLayout]) => (
+                    <div key={rowIndex} className="border border-gray-200 p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                          {parseInt(rowIndex) + 1}번째 층
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentLayouts = design.row_layouts || {};
+                            const newLayouts = { ...currentLayouts };
+                            delete newLayouts[parseInt(rowIndex)];
+                            // 인덱스 재정렬
+                            const reorderedLayouts: any = {};
+                            Object.values(newLayouts).forEach((layout, index) => {
+                              reorderedLayouts[index] = layout;
+                            });
+                            updateDesign('row_layouts', reorderedLayouts);
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                      
+                      {/* 레이아웃 타입 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">레이아웃 타입</label>
+                        <select
+                          value={rowLayout.layout_type}
+                          onChange={(e) => {
+                            const currentLayouts = design.row_layouts || {};
+                            updateDesign('row_layouts', {
+                              ...currentLayouts,
+                              [rowIndex]: {
+                                ...rowLayout,
+                                layout_type: e.target.value as any
+                              }
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                        >
+                          <option value="grid">그리드</option>
+                          <option value="list">리스트</option>
+                          <option value="masonry">메이슨리</option>
+                          <option value="featured">피처드</option>
+                          <option value="banner">배너</option>
+                        </select>
+                      </div>
+                      
+                      {/* 컬럼 수 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">컬럼 수</label>
+                        <select
+                          value={rowLayout.columns}
+                          onChange={(e) => {
+                            const currentLayouts = design.row_layouts || {};
+                            updateDesign('row_layouts', {
+                              ...currentLayouts,
+                              [rowIndex]: {
+                                ...rowLayout,
+                                columns: parseInt(e.target.value)
+                              }
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                        >
+                          <option value={1}>1개</option>
+                          <option value={2}>2개</option>
+                          <option value={3}>3개</option>
+                          <option value={4}>4개</option>
+                          <option value={5}>5개</option>
+                          <option value={6}>6개</option>
+                        </select>
+                      </div>
+                      
+                      {/* 카드 스타일 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">카드 스타일</label>
+                        <select
+                          value={rowLayout.card_style}
+                          onChange={(e) => {
+                            const currentLayouts = design.row_layouts || {};
+                            updateDesign('row_layouts', {
+                              ...currentLayouts,
+                              [rowIndex]: {
+                                ...rowLayout,
+                                card_style: e.target.value as any
+                              }
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                        >
+                          <option value="default">기본</option>
+                          <option value="compact">컴팩트</option>
+                          <option value="detailed">상세</option>
+                          <option value="large">대형</option>
+                        </select>
+                      </div>
+                      
+                      {/* 간격 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">간격</label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {['tight', 'normal', 'loose'].map((spacing) => (
+                            <button
+                              key={spacing}
+                              type="button"
+                              onClick={() => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    spacing: spacing as any
+                                  }
+                                });
+                              }}
+                              className={`p-1 border text-xs transition-all ${
+                                rowLayout.spacing === spacing
+                                  ? 'border-gray-900 bg-gray-900 text-white'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                              }`}
+                            >
+                              {spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : '넓게'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* 높이 비율 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">높이 비율</label>
+                        <select
+                          value={rowLayout.height_ratio || 'square'}
+                          onChange={(e) => {
+                            const currentLayouts = design.row_layouts || {};
+                            updateDesign('row_layouts', {
+                              ...currentLayouts,
+                              [rowIndex]: {
+                                ...rowLayout,
+                                height_ratio: e.target.value as any
+                              }
+                            });
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                        >
+                          <option value="square">정사각형</option>
+                          <option value="portrait">세로형</option>
+                          <option value="landscape">가로형</option>
+                          <option value="auto">자동</option>
+                        </select>
+                      </div>
+                      
+                      {/* 텍스트 정렬 */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">텍스트 정렬</label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {['left', 'center', 'right'].map((alignment) => (
+                            <button
+                              key={alignment}
+                              type="button"
+                              onClick={() => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_alignment: alignment as any
+                                  }
+                                });
+                              }}
+                              className={`p-1 border text-xs transition-all ${
+                                rowLayout.text_alignment === alignment
+                                  ? 'border-gray-900 bg-gray-900 text-white'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                              }`}
+                            >
+                              {alignment === 'left' ? '왼쪽' : alignment === 'center' ? '가운데' : '오른쪽'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
+              )}
               
               <div>
                 <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
@@ -1036,68 +1363,241 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 </button>
               </div>
             ) : (
-              <div className={`grid gap-6 md:gap-8 ${
-                design.layout_style === 'grid' 
-                  ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' 
-                  : design.layout_style === 'list'
-                  ? 'grid-cols-1'
-                  : 'grid-cols-2 md:grid-cols-3'
-              }`}>
-                {/* 제품 등록 카드 */}
-                <div className="group cursor-pointer">
-                  <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
-                    <div className="text-center">
-                      <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
-                      </svg>
-                      <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
-                        제품 등록
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* 실제 제품 카드들 */}
-                {products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product as ProductCardData}
-                    variant={design.product_card_style as any}
-                    showRating={true}
-                    showActions={true}
-                    isOwner={true}
-                    onEdit={() => {}}
-                    onDelete={() => {}}
-                  />
-                ))}
-                
-                {/* 샘플 제품 카드들 (실제 제품이 부족할 때) */}
-                {Array.from({ length: Math.max(0, 6 - products.length) }).map((_, i) => {
-                  const sampleProduct: ProductCardData = {
-                    id: `sample-${i}`,
-                    product_name: `Sample Product ${i + 1}`,
-                    price: 99000 + (i * 10000),
-                    discount_percentage: i % 3 === 0 ? 10 : undefined,
-                    product_image_url: null,
-                    store_id: storeId,
-                    category: 'jewelry',
-                    is_available: true,
-                    created_at: new Date().toISOString()
-                  };
+              <div className="space-y-8">
+                {design.enable_custom_rows ? (
+                  // 커스텀 행 레이아웃
+                  (() => {
+                    const allProducts = [
+                      // 제품 등록 카드를 첫 번째에 추가
+                      { id: 'add-product', isAddCard: true },
+                      ...products,
+                      // 샘플 제품들 추가
+                      ...Array.from({ length: Math.max(0, 8 - products.length) }).map((_, i) => ({
+                        id: `sample-${i}`,
+                        product_name: `Sample Product ${i + 1}`,
+                        price: 99000 + (i * 10000),
+                        discount_percentage: i % 3 === 0 ? 10 : undefined,
+                        product_image_url: null,
+                        store_id: storeId,
+                        category: 'jewelry',
+                        is_available: true,
+                        created_at: new Date().toISOString(),
+                        isSample: true
+                      }))
+                    ];
 
-                  return (
-                    <ProductCard
-                      key={`sample-${i}`}
-                      product={sampleProduct}
-                      variant={design.product_card_style as any}
-                      showRating={false}
-                      showActions={false}
-                      isOwner={false}
-                      onEdit={() => {}}
-                      onDelete={() => {}}
-                    />
-                  );
-                })}
+                    const rowLayouts = design.row_layouts || {};
+                    const rows: any[] = [];
+                    let productIndex = 0;
+
+                    // 각 행별로 제품 배치
+                    Object.entries(rowLayouts).forEach(([rowIndexStr, rowLayout]) => {
+                      const rowIndex = parseInt(rowIndexStr);
+                      const productsInRow = allProducts.slice(productIndex, productIndex + rowLayout.columns);
+                      
+                      if (productsInRow.length > 0) {
+                        rows.push({
+                          index: rowIndex,
+                          layout: rowLayout,
+                          products: productsInRow
+                        });
+                        productIndex += rowLayout.columns;
+                      }
+                    });
+
+                    return rows.map((row) => {
+                      const { layout, products: rowProducts } = row;
+                      
+                      // 간격 설정
+                      const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
+                                     layout.spacing === 'loose' ? 'gap-8' : 'gap-6';
+                      
+                      // 높이 비율 설정
+                      const aspectClass = layout.height_ratio === 'portrait' ? 'aspect-[3/4]' :
+                                         layout.height_ratio === 'landscape' ? 'aspect-[4/3]' :
+                                         layout.height_ratio === 'auto' ? '' : 'aspect-square';
+                      
+                      // 컬럼 설정
+                      const gridCols = layout.columns <= 4 
+                        ? `grid-cols-${layout.columns}` 
+                        : layout.columns === 5 
+                        ? 'grid-cols-5' 
+                        : 'grid-cols-6';
+                      
+                      // 5개, 6개 컬럼을 위한 인라인 스타일
+                      const gridStyle = layout.columns > 4 ? {
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`
+                      } : {};
+                      
+                      // 레이아웃 타입별 스타일
+                      let containerClass = '';
+                      let cardClass = '';
+                      
+                      switch (layout.layout_type) {
+                        case 'featured':
+                          containerClass = `grid ${gridCols} ${gapClass}`;
+                          cardClass = layout.card_style === 'large' ? 'transform hover:scale-105' : '';
+                          break;
+                        case 'banner':
+                          containerClass = `grid ${gridCols} ${gapClass}`;
+                          cardClass = 'relative overflow-hidden';
+                          break;
+                        case 'masonry':
+                          containerClass = `columns-${layout.columns} ${gapClass}`;
+                          cardClass = 'break-inside-avoid mb-6';
+                          break;
+                        case 'list':
+                          containerClass = 'space-y-4';
+                          cardClass = 'flex items-center space-x-4';
+                          break;
+                        default:
+                          containerClass = `grid ${gridCols} ${gapClass}`;
+                      }
+
+                      return (
+                        <div 
+                          key={row.index} 
+                          className={`${containerClass} transition-all duration-300`}
+                          style={{ backgroundColor: layout.background_color, ...gridStyle }}
+                        >
+                          {rowProducts.map((product: any) => {
+                            if (product.isAddCard) {
+                              return (
+                                <div key="add-product" className={`group cursor-pointer ${cardClass}`}>
+                                  <div className={`bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center ${aspectClass || 'aspect-square'}`}>
+                                    <div className={`text-center ${layout.text_alignment === 'center' ? 'text-center' : layout.text_alignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                      <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                                      </svg>
+                                      <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                                        제품 등록
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (layout.layout_type === 'list') {
+                              return (
+                                <div key={product.id} className={`${cardClass} p-4 border border-gray-200 hover:shadow-lg transition-shadow`}>
+                                  <div className="w-24 h-24 bg-gray-100 flex-shrink-0">
+                                    {product.product_image_url ? (
+                                      <img src={product.product_image_url} alt={product.product_name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                        <span className="text-gray-400 text-xs">No Image</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className={`flex-1 ${layout.text_alignment === 'center' ? 'text-center' : layout.text_alignment === 'right' ? 'text-right' : 'text-left'}`}>
+                                    <h3 className="font-medium text-gray-900 mb-1">{product.product_name}</h3>
+                                    <p className="text-lg font-light text-gray-900">
+                                      {product.discount_percentage ? (
+                                        <>
+                                          <span className="line-through text-gray-500 text-sm mr-2">
+                                            ₩{product.price.toLocaleString()}
+                                          </span>
+                                          <span className="text-red-600">
+                                            ₩{Math.round(product.price * (1 - product.discount_percentage / 100)).toLocaleString()}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        `₩${product.price.toLocaleString()}`
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div key={product.id} className={cardClass}>
+                                <ProductCard
+                                  product={product as ProductCardData}
+                                  variant={layout.card_style as any}
+                                  showRating={!product.isSample}
+                                  showActions={!product.isSample}
+                                  isOwner={!product.isSample}
+                                  onEdit={() => {}}
+                                  onDelete={() => {}}
+                                  customAspectRatio={aspectClass}
+                                  textAlignment={layout.text_alignment}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    });
+                  })()
+                ) : (
+                  // 기본 레이아웃
+                  <div className={`grid gap-6 md:gap-8 ${
+                    design.layout_style === 'grid' 
+                      ? `grid-cols-2 md:grid-cols-${Math.min(design.products_per_row || 4, 6)}` 
+                      : design.layout_style === 'list'
+                      ? 'grid-cols-1'
+                      : 'grid-cols-2 md:grid-cols-3'
+                  }`}>
+                    {/* 제품 등록 카드 */}
+                    <div className="group cursor-pointer">
+                      <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                        <div className="text-center">
+                          <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                            제품 등록
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 실제 제품 카드들 */}
+                    {products.map((product) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product as ProductCardData}
+                        variant={design.product_card_style as any}
+                        showRating={true}
+                        showActions={true}
+                        isOwner={true}
+                        onEdit={() => {}}
+                        onDelete={() => {}}
+                      />
+                    ))}
+                    
+                    {/* 샘플 제품 카드들 (실제 제품이 부족할 때) */}
+                    {Array.from({ length: Math.max(0, 6 - products.length) }).map((_, i) => {
+                      const sampleProduct: ProductCardData = {
+                        id: `sample-${i}`,
+                        product_name: `Sample Product ${i + 1}`,
+                        price: 99000 + (i * 10000),
+                        discount_percentage: i % 3 === 0 ? 10 : undefined,
+                        product_image_url: null,
+                        store_id: storeId,
+                        category: 'jewelry',
+                        is_available: true,
+                        created_at: new Date().toISOString()
+                      };
+
+                      return (
+                        <ProductCard
+                          key={`sample-${i}`}
+                          product={sampleProduct}
+                          variant={design.product_card_style as any}
+                          showRating={false}
+                          showActions={false}
+                          isOwner={false}
+                          onEdit={() => {}}
+                          onDelete={() => {}}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>

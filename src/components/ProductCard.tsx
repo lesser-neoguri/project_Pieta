@@ -43,6 +43,8 @@ interface ProductCardProps {
   favoriteLoading?: boolean;
   isFavorite?: boolean;
   className?: string;
+  customAspectRatio?: string;
+  textAlignment?: 'left' | 'center' | 'right';
 }
 
 export default function ProductCard({
@@ -58,7 +60,9 @@ export default function ProductCard({
   onDelete,
   favoriteLoading = false,
   isFavorite = false,
-  className = ''
+  className = '',
+  customAspectRatio,
+  textAlignment = 'left'
 }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
 
@@ -240,7 +244,7 @@ export default function ProductCard({
     return (
       <div className={`group ${className}`}>
         <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
-          <div className="aspect-square bg-[#f8f8f8] relative mb-4 overflow-hidden">
+          <div className={`bg-[#f8f8f8] relative mb-4 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
             {product.product_image_url && !imageError ? (
               <img 
                 src={product.product_image_url} 
@@ -258,7 +262,10 @@ export default function ProductCard({
             {renderBadges()}
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
           </div>
-          <div className="space-y-2">
+          <div className={`space-y-2 ${
+            textAlignment === 'center' ? 'text-center' : 
+            textAlignment === 'right' ? 'text-right' : 'text-left'
+          }`}>
             <h3 className="text-sm font-medium text-gray-900 line-clamp-2 leading-relaxed">
               {product.product_name}
             </h3>
@@ -275,7 +282,7 @@ export default function ProductCard({
     return (
       <div className={`group ${className}`}>
         <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
-          <div className="overflow-hidden bg-[#f8f8f8] aspect-square mb-6 relative">
+          <div className={`overflow-hidden bg-[#f8f8f8] mb-6 relative ${customAspectRatio || 'aspect-square'}`}>
             {renderBadges()}
             
             {product.product_image_url && !imageError ? (
@@ -294,21 +301,29 @@ export default function ProductCard({
             )}
           </div>
           
-          {showStore && storeName && (
-            <p className="text-xs text-gray-400 mb-2 uppercase tracking-wider font-light">
-              {storeName}
-            </p>
-          )}
-          
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium line-clamp-2 group-hover:text-gray-700 transition-colors flex-1 pr-2 leading-relaxed">
-              {product.product_name}
-            </h3>
-            {renderFavoriteButton()}
-          </div>
-          
-          <div className="space-y-1">
-            {renderPrice()}
+          <div className={`${
+            textAlignment === 'center' ? 'text-center' : 
+            textAlignment === 'right' ? 'text-right' : 'text-left'
+          }`}>
+            {showStore && storeName && (
+              <p className="text-xs text-gray-400 mb-2 uppercase tracking-wider font-light">
+                {storeName}
+              </p>
+            )}
+            
+            <div className={`flex items-center mb-3 ${
+              textAlignment === 'center' ? 'justify-center' :
+              textAlignment === 'right' ? 'justify-end' : 'justify-between'
+            }`}>
+              <h3 className="text-sm font-medium line-clamp-2 group-hover:text-gray-700 transition-colors flex-1 pr-2 leading-relaxed">
+                {product.product_name}
+              </h3>
+              {textAlignment === 'left' && renderFavoriteButton()}
+            </div>
+            
+            <div className="space-y-1">
+              {renderPrice()}
+            </div>
           </div>
         </Link>
         {renderActionButtons()}
@@ -321,7 +336,7 @@ export default function ProductCard({
     <div className={`group ${className}`}>
       <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
         {/* 제품 이미지 - 더 크게 */}
-        <div className="aspect-square bg-[#f8f8f8] relative mb-5 overflow-hidden">
+        <div className={`bg-[#f8f8f8] relative mb-5 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
           {product.product_image_url && !imageError ? (
             <img
               src={product.product_image_url}
@@ -344,18 +359,24 @@ export default function ProductCard({
         </div>
         
         {/* 제품 정보 - 간소화 */}
-        <div className="space-y-3">
+        <div className={`space-y-3 ${
+          textAlignment === 'center' ? 'text-center' : 
+          textAlignment === 'right' ? 'text-right' : 'text-left'
+        }`}>
           {showStore && storeName && (
             <p className="text-xs text-gray-400 uppercase tracking-wider font-light">
               {storeName}
             </p>
           )}
           
-          <div className="flex items-start justify-between">
+          <div className={`flex items-start ${
+            textAlignment === 'center' ? 'justify-center' :
+            textAlignment === 'right' ? 'justify-end' : 'justify-between'
+          }`}>
             <h3 className="text-sm font-medium text-gray-900 group-hover:text-black transition-colors line-clamp-2 leading-relaxed flex-1 pr-2">
               {product.product_name}
             </h3>
-            {renderFavoriteButton()}
+            {textAlignment === 'left' && renderFavoriteButton()}
           </div>
           
           {/* 가격만 표시 */}

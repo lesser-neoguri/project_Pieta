@@ -39,6 +39,16 @@ module.exports = {
           },
         },
       },
+      // 그리드 컬럼 확장 (5, 6 컬럼 추가)
+      gridTemplateColumns: {
+        '5': 'repeat(5, minmax(0, 1fr))',
+        '6': 'repeat(6, minmax(0, 1fr))',
+      },
+      // 컬럼 확장 (masonry 레이아웃용)
+      columns: {
+        '5': '5',
+        '6': '6',
+      }
     },
   },
   plugins: [
@@ -57,4 +67,11 @@ module.exports = {
       addUtilities(newUtilities);
     }
   ],
-} 
+  // 5, 6 컬럼 그리드 클래스를 safelist에 추가하여 빌드 시 포함되도록 함
+  safelist: [
+    'grid-cols-5',
+    'grid-cols-6',
+    'columns-5',
+    'columns-6'
+  ]
+}; 
