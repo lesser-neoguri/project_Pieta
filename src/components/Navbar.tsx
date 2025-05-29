@@ -166,14 +166,17 @@ export default function Navbar() {
   // 홈 페이지 여부 확인
   const isHomePage = pathname === '/';
   
+  // 상점 페이지 여부 확인 (상점 상세 페이지와 디자인 스튜디오 페이지)
+  const isStorePage = pathname?.startsWith('/store/') && !pathname?.includes('/product/');
+  
   // 투명 배경이 필요한 페이지 여부
-  const needsTransparentBg = isHomePage;
+  const needsTransparentBg = isHomePage || isStorePage;
   
   // 투명 배경은 필요하지만 아이콘은 검은색이 필요한 페이지
   const needsTransparentWithDarkIcons = isProductDetailPage;
   
   // 투자 페이지에서는 로고 텍스트를 변경
-  const isInvestmentPage = pathname.startsWith('/investment');
+  const isInvestmentPage = pathname?.startsWith('/investment');
   
   if (!mounted) {
     return null;
@@ -181,7 +184,7 @@ export default function Navbar() {
   
   return (
     <>
-      <Banner showBanner={showBanner} setShowBanner={setShowBanner} pathname={pathname} />
+      <Banner showBanner={showBanner} setShowBanner={setShowBanner} pathname={pathname || ''} />
       
       <nav 
         className={`fixed top-0 left-0 right-0 z-40 transition-transform duration-300 ${

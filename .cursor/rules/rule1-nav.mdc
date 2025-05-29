@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When a fixed or sticky navigation bar (like the one in `@/components/Navbar.tsx`) is present, ensure that the main content area of the page (`<main>` tag or primary content wrapper) has adequate top padding or margin to prevent its content from being obscured by the navigation bar. The offset should dynamically account for the navigation bar's height. Reference `@/components/layout/MainLayout.tsx` for an example of how top margin is currently handled.
+
+
+Ensures that page content is not hidden underneath a fixed/sticky navigation bar by applying appropriate top offset to the main content area. This is crucial for maintaining visibility and usability of all page elements

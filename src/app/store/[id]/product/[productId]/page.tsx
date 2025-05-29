@@ -10,6 +10,7 @@ import { X } from 'lucide-react';
 import { extractPathFromUrl } from '@/lib/migration';
 import { toast } from 'react-hot-toast';
 import { useScroll } from '@/hooks/useScroll';
+import ProductCard, { ProductCardData } from '@/components/ProductCard';
 
 // 네비게이션 바 컨트롤을 위한 사용자 정의 이벤트 추가
 const emitNavbarEvent = (hide: boolean) => {
@@ -84,6 +85,16 @@ export default function ProductDetailPage() {
   const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
+  
+  // params가 null인 경우 처리
+  if (!params) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-lg">페이지를 불러올 수 없습니다.</p>
+      </div>
+    );
+  }
+  
   const storeId = params.id as string;
   const productId = params.productId as string;
   
@@ -1678,24 +1689,11 @@ export default function ProductDetailPage() {
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
                   {storeProducts.map((storeProduct) => (
-                    <Link key={storeProduct.id} href={`/store/${storeId}/product/${storeProduct.id}`} className="group">
-                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
-                        {storeProduct.product_image_url ? (
-                          <img 
-                            src={storeProduct.product_image_url} 
-                            alt={storeProduct.product_name} 
-                            className="w-full h-full object-contain p-4"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-gray-900 truncate">{storeProduct.product_name}</h3>
-                        <p className="text-sm text-gray-700">{storeProduct.price.toLocaleString()}원</p>
-                      </div>
-                    </Link>
+                    <ProductCard
+                      key={storeProduct.id}
+                      product={storeProduct as ProductCardData}
+                      variant="compact"
+                    />
                   ))}
                 </div>
                 <div className="flex justify-center mt-8">
@@ -1714,24 +1712,11 @@ export default function ProductDetailPage() {
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
                   {recommendedProducts.map((recProduct) => (
-                    <Link key={recProduct.id} href={`/store/${recProduct.store_id}/product/${recProduct.id}`} className="group">
-                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
-                        {recProduct.product_image_url ? (
-                          <img 
-                            src={recProduct.product_image_url} 
-                            alt={recProduct.product_name} 
-                            className="w-full h-full object-contain p-4"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-gray-900 truncate">{recProduct.product_name}</h3>
-                        <p className="text-sm text-gray-700">{recProduct.price.toLocaleString()}원</p>
-                      </div>
-                    </Link>
+                    <ProductCard
+                      key={recProduct.id}
+                      product={recProduct as ProductCardData}
+                      variant="compact"
+                    />
                   ))}
                 </div>
               </div>
@@ -1745,24 +1730,11 @@ export default function ProductDetailPage() {
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-8">
                   {recentlyViewedProducts.map((recentProduct) => (
-                    <Link key={recentProduct.id} href={`/store/${recentProduct.store_id}/product/${recentProduct.id}`} className="group">
-                      <div className="aspect-square bg-[#f8f8f8] relative mb-3 overflow-hidden">
-                        {recentProduct.product_image_url ? (
-                          <img 
-                            src={recentProduct.product_image_url} 
-                            alt={recentProduct.product_name} 
-                            className="w-full h-full object-contain p-4"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-gray-400">이미지 없음</div>
-                        )}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors"></div>
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-medium text-gray-900 truncate">{recentProduct.product_name}</h3>
-                        <p className="text-sm text-gray-700">{recentProduct.price.toLocaleString()}원</p>
-                      </div>
-                    </Link>
+                    <ProductCard
+                      key={recentProduct.id}
+                      product={recentProduct as ProductCardData}
+                      variant="compact"
+                    />
                   ))}
                 </div>
               </div>

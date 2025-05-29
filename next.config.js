@@ -9,6 +9,20 @@ const nextConfig = {
     // 빌드 시 TypeScript 타입 검사를 비활성화
     ignoreBuildErrors: true,
   },
+  webpack: (config, { isServer }) => {
+    // 클라이언트 사이드에서 Node.js 모듈 fallback 설정
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      };
+    }
+    
+    return config;
+  }
 };
 
 module.exports = nextConfig; 

@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { extractPathFromUrl } from '@/lib/migration';
 import toast from 'react-hot-toast';
 import logger from '@/lib/logger';
+import ProductCard, { ProductCardData } from '@/components/ProductCard';
 
 type StoreData = {
   id: string;
@@ -33,24 +34,100 @@ type ProductData = {
   created_at: string;
   total_sales?: number;
   average_rating?: number;
+  discount_percentage?: number;
+  category?: string;
+};
+
+type StoreDesign = {
+  id?: string;
+  store_id: string;
+  theme_color: string;
+  accent_color: string;
+  background_color: string;
+  text_color: string;
+  font_family: string;
+  layout_style: 'grid' | 'list' | 'masonry';
+  header_style: 'minimal' | 'classic' | 'modern';
+  product_card_style: 'default' | 'compact' | 'detailed';
+  show_store_description: boolean;
+  show_contact_info: boolean;
+  show_business_hours: boolean;
+  banner_height: 'small' | 'medium' | 'large';
+  logo_position: 'left' | 'center' | 'right';
+  title_font_size: 'small' | 'medium' | 'large' | 'xl';
+  description_font_size: 'small' | 'medium' | 'large';
+  banner_image_url?: string;
+  custom_css?: string;
+  title_position_x?: number;
+  title_position_y?: number;
+  description_position_x?: number;
+  description_position_y?: number;
+  text_overlay_settings?: {
+    titleColor: string;
+    descriptionColor: string;
+    titleSize: string;
+    descriptionSize: string;
+    titleWeight: string;
+    descriptionWeight: string;
+  };
+};
+
+const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
+  theme_color: '#000000',
+  accent_color: '#666666',
+  background_color: '#ffffff',
+  text_color: '#000000',
+  font_family: 'Inter',
+  layout_style: 'grid',
+  header_style: 'modern',
+  product_card_style: 'default',
+  show_store_description: true,
+  show_contact_info: true,
+  show_business_hours: true,
+  banner_height: 'medium',
+  logo_position: 'center',
+  title_font_size: 'large',
+  description_font_size: 'medium',
+  banner_image_url: '',
+  custom_css: '',
+  title_position_x: 50,
+  title_position_y: 40,
+  description_position_x: 50,
+  description_position_y: 60,
+  text_overlay_settings: {
+    titleColor: '#ffffff',
+    descriptionColor: '#ffffff',
+    titleSize: 'large',
+    descriptionSize: 'medium',
+    titleWeight: 'normal',
+    descriptionWeight: 'normal'
+  }
 };
 
 export default function StorePage() {
   const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
-  const storeId = params.id as string;
+  const storeId = params?.id as string;
   
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<StoreData | null>(null);
   const [products, setProducts] = useState<ProductData[]>([]);
+  const [design, setDesign] = useState<StoreDesign>(defaultDesign as StoreDesign);
   const [error, setError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
     const fetchStoreAndProducts = async () => {
+      if (!storeId) {
+        setError('잘못된 상점 ID입니다.');
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       
       try {
@@ -76,7 +153,31 @@ export default function StorePage() {
           setIsOwner(true);
         }
 
-        // 상점의 제품 목록 가져오기 - 모든 제품을 가져오도록 수정
+        // 상점 디자인 설정 가져오기
+        const { data: designData, error: designError } = await supabase
+          .from('store_designs')
+          .select('*')
+          .eq('store_id', storeId)
+          .single();
+
+        if (designError && designError.code !== 'PGRST116') {
+          logger.error('디자인 설정 로딩 오류:', designError);
+        }
+
+        if (designData) {
+          const convertedDesign = {
+            ...designData,
+            title_position_x: designData.title_position_x || 50,
+            title_position_y: designData.title_position_y || 40,
+            description_position_x: designData.description_position_x || 50,
+            description_position_y: designData.description_position_y || 60
+          };
+          setDesign(convertedDesign);
+        } else {
+          setDesign({ ...defaultDesign, store_id: storeId });
+        }
+
+        // 상점의 제품 목록 가져오기
         const { data: productsData, error: productsError } = await supabase
           .from('products')
           .select('*')
@@ -87,15 +188,6 @@ export default function StorePage() {
 
         if (productsData) {
           setProducts(productsData);
-          
-          // 디버깅용 로그를 logger로 대체
-          logger.debug('가져온 제품 목록:', productsData);
-          
-          if (productsData.length > 0) {
-            logger.debug('첫 번째 제품의 total_sales:', productsData[0].total_sales);
-            logger.debug('첫 번째 제품의 average_rating:', productsData[0].average_rating);
-          }
-          
           logger.debug(`${productsData?.length || 0}개의 제품을 불러왔습니다.`);
         }
       } catch (error: any) {
@@ -106,9 +198,7 @@ export default function StorePage() {
       }
     };
 
-    if (storeId) {
-      fetchStoreAndProducts();
-    }
+    fetchStoreAndProducts();
   }, [storeId, user]);
 
   // 제품 이미지 삭제 함수
@@ -144,7 +234,7 @@ export default function StorePage() {
 
   // 제품 삭제 함수
   const handleDeleteProduct = async () => {
-    if (!deleteProductId || !isOwner) return;
+    if (!deleteProductId || !isOwner || !storeId) return;
     
     setDeleteLoading(true);
     
@@ -225,10 +315,57 @@ export default function StorePage() {
     }
   };
 
+  // 제품 정렬 함수
+  const sortProducts = (products: ProductData[], sortBy: string) => {
+    const sorted = [...products];
+    switch (sortBy) {
+      case 'price_asc':
+        return sorted.sort((a, b) => a.price - b.price);
+      case 'price_desc':
+        return sorted.sort((a, b) => b.price - a.price);
+      case 'rating':
+        return sorted.sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0));
+      case 'newest':
+      default:
+        return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+  };
+
+  // 디자인 헬퍼 함수들
+  const getBannerHeight = () => {
+    switch (design.banner_height) {
+      case 'small': return 'h-96 md:h-[32rem]';
+      case 'large': return 'h-[40rem] md:h-[48rem]';
+      default: return 'h-[36rem] md:h-[44rem]';
+    }
+  };
+
+  const getTitleSize = () => {
+    switch (design.title_font_size) {
+      case 'small': return 'text-2xl md:text-3xl';
+      case 'medium': return 'text-3xl md:text-4xl';
+      case 'large': return 'text-4xl md:text-5xl';
+      case 'xl': return 'text-5xl md:text-6xl';
+      default: return 'text-4xl md:text-5xl';
+    }
+  };
+
+  const getDescriptionSize = () => {
+    switch (design.description_font_size) {
+      case 'small': return 'text-xs md:text-sm';
+      case 'medium': return 'text-sm md:text-base';
+      case 'large': return 'text-base md:text-lg';
+      default: return 'text-sm md:text-base';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-lg">로딩 중...</p>
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto mb-4 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
+          <p className="text-lg font-light text-gray-600 tracking-wide">Loading Store...</p>
+        </div>
       </div>
     );
   }
@@ -255,96 +392,159 @@ export default function StorePage() {
     );
   }
 
+  const sortedProducts = sortProducts(products, sortBy);
+
   return (
-    <div className="min-h-screen bg-white">
-      {/* 상점 헤더 */}
-      <div className="relative bg-gray-50 border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="flex items-center space-x-8">
-            <div className="w-32 h-32 rounded-full bg-white border border-gray-200 overflow-hidden flex-shrink-0 shadow-sm">
-              {store.store_logo_url ? (
-                <img
-                  src={store.store_logo_url}
-                  alt={store.store_name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <span className="text-4xl font-light text-gray-400 tracking-wide">
-                    {store.store_name.charAt(0)}
-                  </span>
-                </div>
-              )}
+    <div className="min-h-screen" style={{ 
+      backgroundColor: design.background_color,
+      color: design.text_color,
+      fontFamily: design.font_family 
+    }}>
+      {/* 상점 헤더 배너 */}
+      <div className={`relative ${getBannerHeight()} overflow-hidden`}
+           style={{ 
+             backgroundColor: design.theme_color,
+             backgroundImage: design.banner_image_url 
+               ? `linear-gradient(to bottom right, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${design.banner_image_url})`
+               : `linear-gradient(to bottom right, ${design.theme_color}, #1f2937)`,
+             backgroundSize: 'cover',
+             backgroundPosition: 'center',
+             backgroundRepeat: 'no-repeat'
+           }}>
+        {/* 배경 패턴 (이미지가 없을 때만) */}
+        {!design.banner_image_url && (
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent transform -skew-y-12"></div>
+          </div>
+        )}
+
+        {/* 상점 정보 오버레이 */}
+        <div className="absolute inset-0">
+          {/* 상점명 */}
+          <div 
+            className="absolute text-white"
+            style={{
+              left: `${design.title_position_x || 50}%`,
+              top: `${design.title_position_y || 40}%`,
+              transform: 'translate(-50%, -50%)'
+            }}
+          >
+            <div className="flex items-center space-x-4">
+              <h1 className={`${getTitleSize()} font-light tracking-wide`}>
+                {store.store_name}
+              </h1>
+              <span className={`px-3 py-1 text-xs uppercase tracking-wider font-medium rounded-full ${
+                store.is_open 
+                  ? 'bg-green-500/20 text-green-100 border border-green-400/30'
+                  : 'bg-red-500/20 text-red-100 border border-red-400/30'
+              }`}>
+                {store.is_open ? '영업중' : '영업종료'}
+              </span>
             </div>
-            
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="flex items-center space-x-4">
-                    <h1 className="text-3xl font-light text-gray-900 tracking-wide">{store.store_name}</h1>
-                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                      store.is_open ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'
-                    }`}>
-                      {store.is_open ? '영업중' : '영업종료'}
-                    </span>
-                  </div>
-                </div>
-                {isOwner && (
-                  <div className="flex items-center space-x-4">
-                    <Link
-                      href={`/vendor/store/edit/${store.id}`}
-                      className="px-6 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
-                      상점 수정
-                    </Link>
-                    <Link
-                      href={`/store/${store.id}/product/create`}
-                      className="px-6 py-2 bg-black text-white text-sm font-medium hover:bg-gray-800 transition-colors rounded-md"
-                    >
-                      상품 등록
-                    </Link>
-                  </div>
-                )}
-              </div>
-              
-              <p className="text-gray-600 mb-6 max-w-3xl leading-relaxed">
+          </div>
+          
+          {/* 상점 설명 */}
+          {design.show_store_description && (
+            <div 
+              className="absolute text-white"
+              style={{
+                left: `${design.description_position_x || 50}%`,
+                top: `${design.description_position_y || 60}%`,
+                transform: 'translate(-50%, -50%)'
+              }}
+            >
+              <p className={`text-center text-gray-200 ${getDescriptionSize()} max-w-2xl leading-relaxed`}>
                 {store.store_description}
               </p>
-              
-              <div className="flex items-center space-x-6 text-sm text-gray-500">
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 상점 상세 정보 */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-6 md:space-y-0">
+            {/* 상점 메타 정보 */}
+            <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600">
+              <div className="flex items-center">
+                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>{store.store_address}</span>
+              </div>
+              {design.show_contact_info && store.store_phone && (
                 <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                   </svg>
-                  {store.store_address}
+                  <span>{store.store_phone}</span>
                 </div>
-                {store.store_phone && (
-                  <div className="flex items-center">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                    </svg>
-                    {store.store_phone}
-                  </div>
-                )}
-                <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                  제품 {products.length}개
-                </div>
+              )}
+              <div className="flex items-center">
+                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                <span>제품 {products.length}개</span>
+              </div>
+              <div className="flex items-center">
+                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>가입일 {new Date(store.created_at).toLocaleDateString('ko-KR')}</span>
               </div>
             </div>
+
+            {/* 관리자 버튼 */}
+            {isOwner && (
+              <div className="flex items-center space-x-3">
+                <Link
+                  href={`/store/${store.id}/design`}
+                  className="px-6 py-2 border border-gray-300 text-sm uppercase tracking-wider font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-300"
+                >
+                  디자인 수정
+                </Link>
+                <Link
+                  href={`/vendor/store/edit/${store.id}`}
+                  className="px-6 py-2 border border-gray-300 text-sm uppercase tracking-wider font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-300"
+                >
+                  상점 수정
+                </Link>
+                <Link
+                  href={`/store/${store.id}/product/create`}
+                  className="px-6 py-2 bg-gray-900 text-white text-sm uppercase tracking-wider font-medium hover:bg-gray-800 transition-colors duration-300"
+                >
+                  상품 등록
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 제품 목록 */}
+      {/* 제품 목록 섹션 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-light text-gray-900">제품 목록</h2>
+        {/* 섹션 헤더 */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12 space-y-4 md:space-y-0">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-light tracking-wide mb-2" style={{ color: design.text_color }}>
+              컬렉션
+            </h2>
+            <p className="text-gray-600 text-sm">
+              {store.store_name}에서 엄선한 {products.length}개의 제품을 만나보세요
+            </p>
+          </div>
+          
+          {/* 정렬 옵션 */}
           <div className="flex items-center space-x-4">
-            <select className="border-none bg-transparent text-sm text-gray-500 focus:ring-0 font-medium">
+            <span className="text-sm text-gray-500 uppercase tracking-wider">정렬</span>
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="border-none bg-transparent text-sm font-medium uppercase tracking-wider cursor-pointer" 
+              style={{ color: design.text_color }}
+            >
               <option value="newest">최신순</option>
               <option value="price_asc">가격 낮은순</option>
               <option value="price_desc">가격 높은순</option>
@@ -353,100 +553,104 @@ export default function StorePage() {
           </div>
         </div>
 
-        {products.length === 0 && !isOwner ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto mb-4 text-gray-300">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {/* 제품 그리드 */}
+        {products.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 mx-auto mb-6 text-gray-300">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} 
                   d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-500 mb-2">등록된 제품이 없습니다</h3>
-            <p className="text-gray-400">첫 번째 제품을 등록해보세요</p>
+            <h3 className="text-xl font-light mb-3 tracking-wide" style={{ color: design.text_color }}>
+              아직 등록된 제품이 없습니다
+            </h3>
+            <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
+              첫 번째 제품을 등록하여 고객들에게 선보이세요
+            </p>
+            {isOwner && (
+              <Link
+                href={`/store/${store.id}/product/create`}
+                className="inline-block px-8 py-3 bg-gray-900 text-white text-sm uppercase tracking-widest font-medium hover:bg-gray-800 transition-colors duration-300"
+              >
+                제품 등록하기
+              </Link>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className={`grid gap-6 md:gap-8 ${
+            design.layout_style === 'grid' 
+              ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' 
+              : design.layout_style === 'list'
+              ? 'grid-cols-1'
+              : 'grid-cols-2 md:grid-cols-3'
+          }`}>
+            {/* 제품 등록 카드 */}
             {isOwner && (
-              <Link href={`/store/${store.id}/product/create`} className="group">
-                <div className="relative aspect-square bg-gray-50 border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors rounded-lg">
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                    <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+              <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
+                <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                  <div className="text-center">
+                    <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
                     </svg>
-                    <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium">
-                      제품 등록하기
+                    <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                      제품 등록
                     </span>
                   </div>
                 </div>
               </Link>
             )}
             
-            {products.map((product) => (
-              <div key={product.id} className="group">
-                <Link href={`/store/${store.id}/product/${product.id}`} className="block">
-                  <div className="relative aspect-square bg-gray-50 overflow-hidden rounded-lg border border-gray-200 group-hover:shadow-md transition-shadow duration-300">
-                    {product.product_image_url ? (
-                      <img
-                        src={product.product_image_url}
-                        alt={product.product_name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-3xl font-light text-gray-300">
-                          {product.product_name.charAt(0)}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {!product.is_available && (
-                      <div className="absolute top-3 right-3 px-2 py-1 text-xs font-medium text-white bg-black/70 backdrop-blur-sm rounded">
-                        품절
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="mt-4 space-y-2">
-                    <h3 className="text-lg font-medium text-gray-900 group-hover:text-black transition-colors">
-                      {product.product_name}
-                    </h3>
-                    <p className="text-xl font-light text-gray-900">
-                      {product.price.toLocaleString()}원
-                    </p>
-                    
-                    <div className="flex items-center justify-between pt-1">
-                      <div className="flex items-center">
-                        <div className="flex items-center">
-                          {[...Array(5)].map((_, i) => (
-                            <svg 
-                              key={i} 
-                              className={`w-4 h-4 ${
-                                i < Math.floor(product.average_rating || 0) 
-                                  ? 'text-yellow-400' 
-                                  : 'text-gray-200'
-                              }`} 
-                              fill="currentColor" 
-                              viewBox="0 0 20 20"
-                            >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                          ))}
-                        </div>
-                        <span className="ml-1 text-sm text-gray-500">
-                          {(product.average_rating || 0).toFixed(1)}
-                        </span>
-                      </div>
-                      <span className="text-sm text-gray-400">
-                        판매 {product.total_sales || 0}개
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              </div>
+            {/* 실제 제품 카드들 */}
+            {sortedProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product as ProductCardData}
+                variant={design.product_card_style as any}
+                showRating={true}
+                showActions={isOwner}
+                isOwner={isOwner}
+                onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                onDelete={() => setDeleteProductId(product.id)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* 추가 정보 섹션 */}
+      {(design.show_contact_info || design.show_business_hours) && (
+        <div className="bg-gray-50 border-t border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              {design.show_contact_info && (
+                <div>
+                  <h3 className="text-lg font-medium mb-6 tracking-wide" style={{ color: design.text_color }}>
+                    연락처 정보
+                  </h3>
+                  <div className="space-y-3 text-sm text-gray-600">
+                    {store.store_phone && <p>전화: {store.store_phone}</p>}
+                    <p>주소: {store.store_address}</p>
+                  </div>
+                </div>
+              )}
+              
+              {design.show_business_hours && (
+                <div>
+                  <h3 className="text-lg font-medium mb-6 tracking-wide" style={{ color: design.text_color }}>
+                    영업시간
+                  </h3>
+                  <div className="space-y-3 text-sm text-gray-600">
+                    <p>월-금: 9:00 AM - 6:00 PM</p>
+                    <p>토-일: 10:00 AM - 5:00 PM</p>
+                    <p>공휴일: 휴무</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 삭제 확인 모달 */}
       {deleteProductId && (
@@ -474,6 +678,11 @@ export default function StorePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 커스텀 CSS 적용 */}
+      {design.custom_css && (
+        <style dangerouslySetInnerHTML={{ __html: design.custom_css }} />
       )}
     </div>
   );

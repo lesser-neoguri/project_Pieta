@@ -238,199 +238,261 @@ export default function StoreForm({ storeId }: { storeId?: string }) {
                  message.text === '존재하지 않는 상점입니다.' ||
                  message.text === '해당 상점을 수정할 권한이 없습니다.')) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
-        <div className={`p-4 mb-6 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-          {message.text}
+      <div className="bg-white">
+        <div className="text-center space-y-8">
+          <div className={`inline-block px-8 py-4 border ${
+            message.type === 'success' 
+              ? 'border-green-200 bg-green-50 text-green-700' 
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}>
+            <p className="font-light text-sm tracking-wide">
+              {message.text}
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/')}
+            className="px-8 py-3 border border-gray-900 text-gray-900 bg-white hover:bg-gray-900 hover:text-white transition-all duration-300 text-sm tracking-wider uppercase font-light"
+          >
+            홈으로 돌아가기
+          </button>
         </div>
-        <button
-          onClick={() => router.push('/')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          홈으로 돌아가기
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
-      <h2 className="text-2xl font-bold mb-6 text-center font-korean">
-        {existingStore ? '상점 정보 수정' : '상점 개설'}
-      </h2>
+    <div className="bg-white">
+      {/* 타이틀 섹션 */}
+      <div className="text-center mb-16">
+        <h2 className="text-2xl font-light text-gray-900 tracking-wider uppercase mb-4">
+          {existingStore ? 'Edit Store Information' : 'Create New Store'}
+        </h2>
+        <div className="w-16 h-px bg-gray-900 mx-auto"></div>
+      </div>
       
       {message && (
-        <div className={`p-4 mb-6 rounded ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} font-korean`}>
-          {message.text}
+        <div className="text-center mb-12">
+          <div className={`inline-block px-8 py-4 border ${
+            message.type === 'success' 
+              ? 'border-green-200 bg-green-50 text-green-700' 
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}>
+            <p className="font-light text-sm tracking-wide">
+              {message.text}
+            </p>
+          </div>
         </div>
       )}
       
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="storeName" className="block text-sm font-medium text-gray-700 mb-1 font-korean">
-            상점명 <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="storeName"
-            type="text"
-            value={storeName}
-            onChange={(e) => setStoreName(e.target.value)}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-korean"
-            placeholder="상점명을 입력하세요"
-          />
-        </div>
-        
-        <div>
-          <label htmlFor="storeDescription" className="block text-sm font-medium text-gray-700 mb-1 font-korean">
-            상점 설명
-          </label>
-          <textarea
-            id="storeDescription"
-            value={storeDescription}
-            onChange={(e) => setStoreDescription(e.target.value)}
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-korean"
-            placeholder="상점에 대한 설명을 입력하세요"
-          />
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="storeLogoUrl" className="block text-sm font-medium text-gray-700 mb-1">
-              상점 로고 URL
-            </label>
-            <input
-              id="storeLogoUrl"
-              type="url"
-              value={storeLogoUrl}
-              onChange={(e) => setStoreLogoUrl(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="상점 로고 이미지 URL을 입력하세요"
-            />
+      <form onSubmit={handleSubmit} className="space-y-12">
+        {/* 기본 정보 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Basic Information
+          </h3>
+          
+          <div className="space-y-8">
+            <div>
+              <label htmlFor="storeName" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                상점명 <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="storeName"
+                type="text"
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+                required
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+                placeholder="Enter store name"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="storeDescription" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                상점 설명
+              </label>
+              <textarea
+                id="storeDescription"
+                value={storeDescription}
+                onChange={(e) => setStoreDescription(e.target.value)}
+                rows={4}
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300 resize-none"
+                placeholder="Enter store description"
+              />
+            </div>
           </div>
+        </div>
+
+        {/* 이미지 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Brand Assets
+          </h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div>
+              <label htmlFor="storeLogoUrl" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                로고 URL
+              </label>
+              <input
+                id="storeLogoUrl"
+                type="url"
+                value={storeLogoUrl}
+                onChange={(e) => setStoreLogoUrl(e.target.value)}
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+                placeholder="Enter logo image URL"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="storeBannerUrl" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                배너 URL
+              </label>
+              <input
+                id="storeBannerUrl"
+                type="url"
+                value={storeBannerUrl}
+                onChange={(e) => setStoreBannerUrl(e.target.value)}
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+                placeholder="Enter banner image URL"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 연락처 정보 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Contact Information
+          </h3>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div>
+              <label htmlFor="storePhone" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                전화번호 <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="storePhone"
+                type="tel"
+                value={storePhone}
+                onChange={(e) => setStorePhone(e.target.value)}
+                required
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+                placeholder="Enter phone number"
+              />
+            </div>
+            
+            <div>
+              <label htmlFor="storeEmail" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+                이메일 <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="storeEmail"
+                type="email"
+                value={storeEmail}
+                onChange={(e) => setStoreEmail(e.target.value)}
+                required
+                className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+                placeholder="Enter email address"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 주소 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Location
+          </h3>
           
           <div>
-            <label htmlFor="storeBannerUrl" className="block text-sm font-medium text-gray-700 mb-1">
-              상점 배너 URL
+            <label htmlFor="storeAddress" className="block text-sm font-light text-gray-700 mb-3 tracking-wide uppercase">
+              주소 <span className="text-red-400">*</span>
             </label>
             <input
-              id="storeBannerUrl"
-              type="url"
-              value={storeBannerUrl}
-              onChange={(e) => setStoreBannerUrl(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="상점 배너 이미지 URL을 입력하세요"
+              id="storeAddress"
+              type="text"
+              value={storeAddress}
+              onChange={(e) => setStoreAddress(e.target.value)}
+              required
+              className="w-full px-0 py-4 border-0 border-b border-gray-200 focus:border-gray-900 focus:outline-none bg-transparent text-gray-900 placeholder-gray-400 transition-colors duration-300"
+              placeholder="Enter store address"
             />
           </div>
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="storePhone" className="block text-sm font-medium text-gray-700 mb-1">
-              상점 전화번호 <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="storePhone"
-              type="tel"
-              value={storePhone}
-              onChange={(e) => setStorePhone(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="상점 전화번호를 입력하세요"
-            />
-          </div>
+
+        {/* 영업 시간 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Business Hours
+          </h3>
           
-          <div>
-            <label htmlFor="storeEmail" className="block text-sm font-medium text-gray-700 mb-1">
-              상점 이메일 <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="storeEmail"
-              type="email"
-              value={storeEmail}
-              onChange={(e) => setStoreEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="상점 이메일을 입력하세요"
-            />
-          </div>
-        </div>
-        
-        <div>
-          <label htmlFor="storeAddress" className="block text-sm font-medium text-gray-700 mb-1">
-            상점 주소 <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="storeAddress"
-            type="text"
-            value={storeAddress}
-            onChange={(e) => setStoreAddress(e.target.value)}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="상점 주소를 입력하세요"
-          />
-        </div>
-        
-        <div>
-          <h3 className="text-lg font-medium text-gray-700 mb-3">영업 시간</h3>
-          <div className="space-y-4">
+          <div className="space-y-6">
             {Object.entries(businessHours).map(([day, hours]) => (
-              <div key={day} className="flex items-center space-x-4">
-                <div className="w-24">
+              <div key={day} className="flex items-center justify-between py-4 border-b border-gray-100 last:border-b-0">
+                <div className="flex items-center space-x-4 min-w-0 flex-1">
                   <label className="inline-flex items-center">
                     <input
                       type="checkbox"
                       checked={(hours as any).isOpen}
                       onChange={(e) => updateBusinessHour(day as keyof BusinessHours, 'isOpen', e.target.checked)}
-                      className="rounded text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
                     />
-                    <span className="ml-2 text-sm font-medium text-gray-700">
+                    <span className="ml-3 text-sm font-light text-gray-900 tracking-wide uppercase min-w-0 w-20">
                       {day.charAt(0).toUpperCase() + day.slice(1)}
                     </span>
                   </label>
                 </div>
                 
-                <div className="flex items-center space-x-2 flex-1">
+                <div className="flex items-center space-x-4">
                   <input
                     type="time"
                     value={(hours as any).open}
                     onChange={(e) => updateBusinessHour(day as keyof BusinessHours, 'open', e.target.value)}
                     disabled={!(hours as any).isOpen}
-                    className="px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    className="px-3 py-2 border border-gray-200 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400 transition-colors duration-300"
                   />
-                  <span>~</span>
+                  <span className="text-gray-400 font-light">~</span>
                   <input
                     type="time"
                     value={(hours as any).close}
                     onChange={(e) => updateBusinessHour(day as keyof BusinessHours, 'close', e.target.value)}
                     disabled={!(hours as any).isOpen}
-                    className="px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    className="px-3 py-2 border border-gray-200 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400 transition-colors duration-300"
                   />
                 </div>
               </div>
             ))}
           </div>
         </div>
-        
-        <div>
-          <label className="inline-flex items-center">
-            <input
-              type="checkbox"
-              checked={isOpen}
-              onChange={(e) => setIsOpen(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500"
-            />
-            <span className="ml-2 text-sm font-medium text-gray-700">현재 영업 중</span>
-          </label>
+
+        {/* 영업 상태 섹션 */}
+        <div className="space-y-8">
+          <h3 className="text-lg font-light text-gray-900 tracking-wide uppercase border-b border-gray-200 pb-4">
+            Store Status
+          </h3>
+          
+          <div>
+            <label className="inline-flex items-center">
+              <input
+                type="checkbox"
+                checked={isOpen}
+                onChange={(e) => setIsOpen(e.target.checked)}
+                className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
+              />
+              <span className="ml-3 text-sm font-light text-gray-900 tracking-wide">현재 영업 중</span>
+            </label>
+          </div>
         </div>
-        
-        <div className="flex justify-end">
+
+        {/* 제출 버튼 */}
+        <div className="pt-8 text-center">
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-12 py-4 border border-gray-900 text-gray-900 bg-white hover:bg-gray-900 hover:text-white transition-all duration-300 text-sm tracking-wider uppercase font-light disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-gray-900"
           >
-            {loading ? '처리 중...' : existingStore ? '상점 정보 수정' : '상점 개설하기'}
+            {loading ? 'Processing...' : existingStore ? 'Update Store' : 'Create Store'}
           </button>
         </div>
       </form>

@@ -9,6 +9,7 @@ import logger from '@/lib/logger';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useScroll } from '@/hooks/useScroll';
 import { toast } from 'react-hot-toast';
+import ProductCard, { ProductCardData } from './ProductCard';
 
 export type ProductData = {
   id: string;
@@ -65,13 +66,14 @@ export default function ProductListPage({
   const { scrollY } = useScroll({ throttleDelay: 20 });
   
   // URL 파라미터에서 카테고리 값을 읽어와 초기 상태 설정
-  const initialCategory = searchParams.get('category') || 'all';
+  const currentCategory = searchParams?.get('category') || 'all';
+  const currentSort = searchParams?.get('sort') || 'newest';
   
   // 필터링 및 정렬 상태
-  const [sortOption, setSortOption] = useState('newest');
+  const [sortOption, setSortOption] = useState(currentSort);
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
+  const [selectedCategory, setSelectedCategory] = useState<string>(currentCategory);
   
   // 좋아요 상태 관리
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
@@ -81,6 +83,30 @@ export default function ProductListPage({
   const bannerHeight = useMemo(() => {
     return Math.max(30, 70 - (scrollY * 0.12));
   }, [scrollY]);
+
+  // 사용자의 좋아요 상태 불러오기 - useEffect보다 먼저 정의
+  const fetchFavorites = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const { data: favoriteData, error } = await supabase
+        .from('product_favorites')
+        .select('product_id')
+        .eq('user_id', user.id);
+        
+      if (error) {
+        console.error('좋아요 데이터 로딩 오류:', error);
+        return;
+      }
+      
+      if (favoriteData) {
+        const favoriteIds = new Set(favoriteData.map(fav => fav.product_id));
+        setFavorites(favoriteIds);
+      }
+    } catch (error) {
+      console.error('좋아요 데이터 로딩 중 예외 발생:', error);
+    }
+  }, [user]);
 
   // 제품 필터링 로직 메모이제이션
   const fetchProducts = useCallback(async () => {
@@ -164,26 +190,60 @@ export default function ProductListPage({
     }
   }, [sortOption, showUnavailable, searchQuery, selectedCategory, productFilter]);
 
+  // URL 업데이트 함수 - pathname null 체크 추가
+  const updateURL = useCallback((newCategory: string, newSort: string) => {
+    if (!searchParams || !pathname) return;
+    
+    const params = new URLSearchParams(searchParams.toString());
+    
+    if (newCategory !== 'all') {
+      params.set('category', newCategory);
+    } else {
+      params.delete('category');
+    }
+    
+    if (newSort !== 'newest') {
+      params.set('sort', newSort);
+    } else {
+      params.delete('sort');
+    }
+    
+    const newURL = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.push(newURL);
+    
+    // 상태 업데이트
+    setSelectedCategory(newCategory);
+    setSortOption(newSort);
+  }, [searchParams, pathname, router]);
+
   // 필터 변경 시 데이터 로드
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // 카테고리 변경 핸들러 업데이트
-  const handleCategoryChange = useCallback((categoryId: string) => {
-    setSelectedCategory(categoryId);
-    
-    // URL 파라미터 업데이트
-    const params = new URLSearchParams(searchParams.toString());
-    if (categoryId === 'all') {
-      params.delete('category');
+  // 사용자 변경 시 좋아요 데이터 로드
+  useEffect(() => {
+    if (user) {
+      fetchFavorites();
     } else {
-      params.set('category', categoryId);
+      setFavorites(new Set());
     }
-    
-    // 현재 경로 유지하면서 파라미터만 업데이트
-    router.push(`${pathname}?${params.toString()}`);
-  }, [searchParams, router, pathname]);
+  }, [user, fetchFavorites]);
+
+  // URL 파라미터 변경 감지
+  useEffect(() => {
+    if (searchParams) {
+      const newCategory = searchParams.get('category') || 'all';
+      const newSort = searchParams.get('sort') || 'newest';
+      setSelectedCategory(newCategory);
+      setSortOption(newSort);
+    }
+  }, [searchParams]);
+
+  // 카테고리 변경 핸들러
+  const handleCategoryChange = (categoryId: string) => {
+    updateURL(categoryId, sortOption);
+  };
 
   // 검색어 변경 핸들러
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,42 +256,19 @@ export default function ProductListPage({
     setSelectedCategory('all');
   }, []);
 
-  // 사용자의 좋아요 상태 불러오기
-  const fetchFavorites = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      const { data: favoriteData, error } = await supabase
-        .from('product_favorites')
-        .select('product_id')
-        .eq('user_id', user.id);
-        
-      if (error) {
-        console.error('좋아요 데이터 로딩 오류:', error);
-        return;
-      }
-      
-      if (favoriteData) {
-        const favoriteIds = new Set(favoriteData.map(fav => fav.product_id));
-        setFavorites(favoriteIds);
-      }
-    } catch (error) {
-      console.error('좋아요 데이터 로딩 중 예외 발생:', error);
-    }
-  }, [user]);
-
   // 좋아요 토글 함수
-  const handleToggleFavorite = useCallback(async (e: React.MouseEvent, productId: string) => {
-    e.preventDefault(); // Link 클릭 방지
-    e.stopPropagation();
-    
+  const handleToggleFavorite = async (productId: string) => {
     if (!user) {
-      toast.error('로그인이 필요한 기능입니다.');
+      toast.error('로그인이 필요합니다.');
       return;
     }
 
-    // 로딩 상태 설정
-    setFavoriteLoading(prev => new Set([...prev, productId]));
+    // 이미 로딩 중인 경우 중복 요청 방지
+    if (favoriteLoading.has(productId)) {
+      return;
+    }
+
+    setFavoriteLoading(prev => new Set(prev).add(productId));
     
     try {
       const isFavorite = favorites.has(productId);
@@ -241,8 +278,8 @@ export default function ProductListPage({
         const { error } = await supabase
           .from('product_favorites')
           .delete()
-          .eq('product_id', productId)
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .eq('product_id', productId);
           
         if (error) throw error;
         
@@ -252,39 +289,32 @@ export default function ProductListPage({
           return newFavorites;
         });
         
-        toast.success('관심 상품에서 제거되었습니다.');
+        toast.success('좋아요를 취소했습니다.');
       } else {
         // 좋아요 추가
         const { error } = await supabase
           .from('product_favorites')
-          .insert([{ product_id: productId, user_id: user.id }]);
+          .insert({
+            user_id: user.id,
+            product_id: productId
+          });
           
         if (error) throw error;
         
-        setFavorites(prev => new Set([...prev, productId]));
-        toast.success('관심 상품에 추가되었습니다.');
+        setFavorites(prev => new Set(prev).add(productId));
+        toast.success('좋아요에 추가했습니다.');
       }
     } catch (error: any) {
-      console.error('좋아요 처리 중 오류:', error);
-      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
+      console.error('좋아요 토글 오류:', error);
+      toast.error('오류가 발생했습니다.');
     } finally {
-      // 로딩 상태 해제
       setFavoriteLoading(prev => {
         const newLoading = new Set(prev);
         newLoading.delete(productId);
         return newLoading;
       });
     }
-  }, [user, favorites]);
-
-  // 사용자 변경 시 좋아요 데이터 로드
-  useEffect(() => {
-    if (user) {
-      fetchFavorites();
-    } else {
-      setFavorites(new Set());
-    }
-  }, [user, fetchFavorites]);
+  };
 
   return (
     <MainLayout centered={false}>
@@ -373,7 +403,7 @@ export default function ProductListPage({
                 <select 
                   className="border-none bg-transparent focus:ring-0 text-sm font-light tracking-wider uppercase cursor-pointer"
                   value={sortOption}
-                  onChange={(e) => setSortOption(e.target.value)}
+                  onChange={(e) => updateURL(selectedCategory, e.target.value)}
                 >
                   <option value="newest">최신순</option>
                   <option value="price_asc">가격 낮은순</option>
@@ -431,93 +461,16 @@ export default function ProductListPage({
                   const isLoading = favoriteLoading.has(product.id);
                   
                   return (
-                    <Link 
+                    <ProductCard
                       key={product.id}
-                      href={`/store/${product.store_id}/product/${product.id}`}
-                      className="group"
-                    >
-                      <div className="overflow-hidden bg-[#f8f8f8] aspect-square mb-5 relative">
-                        {/* 품절 표시 */}
-                        {!product.is_available && (
-                          <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-3 py-1 uppercase tracking-wider z-10 font-light">
-                            품절
-                          </div>
-                        )}
-                        
-                        {product.product_image_url ? (
-                          <img
-                            src={product.product_image_url}
-                            alt={product.product_name}
-                            className="w-full h-full object-contain p-2 group-hover:scale-105 transition-all duration-700 ease-out"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                            이미지 없음
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-400 mb-1 uppercase tracking-wider font-light">{product.store_name}</p>
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-medium line-clamp-1 group-hover:text-gray-700 transition-colors flex-1 pr-2">
-                            {product.product_name}
-                          </h3>
-                          {/* 좋아요 하트 아이콘 */}
-                          <button
-                            onClick={(e) => handleToggleFavorite(e, product.id)}
-                            className={`p-1 transition-all duration-200 ${
-                              isLoading 
-                                ? 'cursor-not-allowed opacity-50' 
-                                : 'hover:opacity-70'
-                            }`}
-                            disabled={isLoading}
-                          >
-                            {isLoading ? (
-                              <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
-                            ) : (
-                              <svg 
-                                xmlns="http://www.w3.org/2000/svg" 
-                                className={`h-4 w-4 transition-colors duration-200 ${
-                                  isFavorite 
-                                    ? 'text-black fill-black' 
-                                    : 'text-gray-400 hover:text-black'
-                                }`}
-                                viewBox="0 0 24 24" 
-                                stroke="currentColor"
-                                fill={isFavorite ? 'currentColor' : 'none'}
-                                strokeWidth={2}
-                              >
-                                <path 
-                                  strokeLinecap="round" 
-                                  strokeLinejoin="round" 
-                                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" 
-                                />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
-                        {/* 가격 표시 - 할인가 있으면 할인가 UI, 없으면 기본 가격 */}
-                        {product.is_on_sale && product.discounted_price && product.discount_percentage ? (
-                          <div className="space-y-1">
-                            {/* 원래 가격 (취소선) */}
-                            <p className="text-xs text-gray-400 line-through font-light">
-                              ₩{product.price.toLocaleString()}
-                            </p>
-                            {/* 할인율과 할인가 */}
-                            <div className="flex items-center space-x-2">
-                              <span className="bg-black text-white text-xs px-2 py-1 font-medium">
-                                -{product.discount_percentage}%
-                              </span>
-                              <span className="text-sm font-medium">
-                                ₩{product.discounted_price.toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-sm font-medium">₩{product.price.toLocaleString()}</p>
-                        )}
-                      </div>
-                    </Link>
+                      product={product as ProductCardData}
+                      variant="detailed"
+                      showStore={true}
+                      showFavorite={true}
+                      isFavorite={isFavorite}
+                      favoriteLoading={isLoading}
+                      onFavoriteToggle={handleToggleFavorite}
+                    />
                   );
                 })}
               </div>
