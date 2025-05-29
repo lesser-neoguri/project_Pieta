@@ -191,12 +191,39 @@ export default function StorePage() {
             title_position_y: designData.title_position_y || 40,
             description_position_x: designData.description_position_x || 50,
             description_position_y: designData.description_position_y || 60,
+            text_overlay_settings: (() => {
+              try {
+                if (typeof designData.text_overlay_settings === 'string') {
+                  return JSON.parse(designData.text_overlay_settings);
+                } else if (typeof designData.text_overlay_settings === 'object') {
+                  return designData.text_overlay_settings;
+                } else {
+                  return defaultDesign.text_overlay_settings;
+                }
+              } catch (e) {
+                console.error('Error parsing text_overlay_settings:', e);
+                return defaultDesign.text_overlay_settings;
+              }
+            })(),
             // 타입 변환 명시적 처리
             products_per_row: typeof designData.products_per_row === 'string' 
               ? parseInt(designData.products_per_row) 
               : (designData.products_per_row || 4),
             enable_custom_rows: designData.enable_custom_rows || false,
-            row_layouts: designData.row_layouts || {},
+            row_layouts: (() => {
+              try {
+                if (typeof designData.row_layouts === 'string') {
+                  return JSON.parse(designData.row_layouts);
+                } else if (typeof designData.row_layouts === 'object') {
+                  return designData.row_layouts;
+                } else {
+                  return {};
+                }
+              } catch (e) {
+                console.error('Error parsing row_layouts:', e);
+                return {};
+              }
+            })(),
             product_spacing: designData.product_spacing || 'normal'
           };
           setDesign(convertedDesign);

@@ -195,8 +195,35 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             title_position_y: existingDesign.title_position_y || 40,
             description_position_x: existingDesign.description_position_x || 50,
             description_position_y: existingDesign.description_position_y || 60,
+            text_overlay_settings: (() => {
+              try {
+                if (typeof existingDesign.text_overlay_settings === 'string') {
+                  return JSON.parse(existingDesign.text_overlay_settings);
+                } else if (typeof existingDesign.text_overlay_settings === 'object') {
+                  return existingDesign.text_overlay_settings;
+                } else {
+                  return defaultDesign.text_overlay_settings;
+                }
+              } catch (e) {
+                console.error('Error parsing text_overlay_settings:', e);
+                return defaultDesign.text_overlay_settings;
+              }
+            })(),
             // 새로운 필드들 처리 - 타입 변환 명시적 처리
-            row_layouts: existingDesign.row_layouts || defaultDesign.row_layouts,
+            row_layouts: (() => {
+              try {
+                if (typeof existingDesign.row_layouts === 'string') {
+                  return JSON.parse(existingDesign.row_layouts);
+                } else if (typeof existingDesign.row_layouts === 'object') {
+                  return existingDesign.row_layouts;
+                } else {
+                  return defaultDesign.row_layouts;
+                }
+              } catch (e) {
+                console.error('Error parsing row_layouts:', e);
+                return defaultDesign.row_layouts;
+              }
+            })(),
             products_per_row: typeof existingDesign.products_per_row === 'string' 
               ? parseInt(existingDesign.products_per_row) 
               : (existingDesign.products_per_row || 4),
@@ -234,6 +261,9 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     setMessage(null);
 
     try {
+      // 디버깅을 위한 로그 추가
+      console.log('Design data before save:', design);
+      
       const designData = {
         store_id: storeId,
         theme_color: design.theme_color,
@@ -257,30 +287,37 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
         title_position_y: design.title_position_y,
         description_position_x: design.description_position_x,
         description_position_y: design.description_position_y,
-        text_overlay_settings: design.text_overlay_settings,
-        // 새로운 필드들 추가
-        row_layouts: design.row_layouts || {},
+        text_overlay_settings: design.text_overlay_settings ? JSON.stringify(design.text_overlay_settings) : '{}',
+        // 새로운 필드들 추가 - JSON으로 직렬화
+        row_layouts: design.row_layouts ? JSON.stringify(design.row_layouts) : '{}',
         products_per_row: design.products_per_row || 4,
         enable_custom_rows: design.enable_custom_rows || false,
         product_spacing: design.product_spacing || 'normal'
       };
 
+      console.log('Prepared design data for save:', designData);
+
       let result;
       
       if (design.id) {
         // 기존 디자인 업데이트
+        console.log('Updating existing design with ID:', design.id);
         result = await supabase
           .from('store_designs')
           .update(designData)
           .eq('id', design.id);
       } else {
         // 새 디자인 생성
+        console.log('Creating new design');
         result = await supabase
           .from('store_designs')
           .insert([designData]);
       }
 
+      console.log('Supabase result:', result);
+
       if (result.error) {
+        console.error('Supabase error details:', result.error);
         throw result.error;
       }
 
@@ -295,9 +332,30 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       }, 2000);
     } catch (error: any) {
       console.error('디자인 저장 중 오류 발생:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        stack: error.stack
+      });
+      
       logger.error('디자인 저장 중 오류 발생:', error);
+      
+      // 더 자세한 오류 메시지 생성
+      let errorMessage = '알 수 없는 오류';
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.code) {
+        errorMessage = `오류 코드: ${error.code}`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else {
+        errorMessage = `오류 정보: ${JSON.stringify(error)}`;
+      }
+      
       setMessage({
-        text: `디자인 저장 실패: ${error.message || JSON.stringify(error) || '알 수 없는 오류'}`,
+        text: `디자인 저장 실패: ${errorMessage}`,
         type: 'error'
       });
     } finally {
