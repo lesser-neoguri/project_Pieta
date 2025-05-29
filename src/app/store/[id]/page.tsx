@@ -85,6 +85,8 @@ type StoreDesign = {
   };
   products_per_row?: number;
   enable_custom_rows?: boolean;
+  // 상품 간격 설정 추가
+  product_spacing?: 'tight' | 'normal' | 'loose' | 'extra-loose';
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -116,7 +118,10 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
     descriptionSize: 'medium',
     titleWeight: 'normal',
     descriptionWeight: 'normal'
-  }
+  },
+  products_per_row: 4,
+  enable_custom_rows: false,
+  product_spacing: 'normal'
 };
 
 export default function StorePage() {
@@ -191,7 +196,8 @@ export default function StorePage() {
               ? parseInt(designData.products_per_row) 
               : (designData.products_per_row || 4),
             enable_custom_rows: designData.enable_custom_rows || false,
-            row_layouts: designData.row_layouts || {}
+            row_layouts: designData.row_layouts || {},
+            product_spacing: designData.product_spacing || 'normal'
           };
           setDesign(convertedDesign);
         } else {
@@ -377,6 +383,16 @@ export default function StorePage() {
       case 'medium': return 'text-sm md:text-base';
       case 'large': return 'text-base md:text-lg';
       default: return 'text-sm md:text-base';
+    }
+  };
+
+  const getProductSpacing = () => {
+    switch (design.product_spacing) {
+      case 'tight': return 'gap-2 md:gap-3';
+      case 'normal': return 'gap-6 md:gap-8';
+      case 'loose': return 'gap-8 md:gap-12';
+      case 'extra-loose': return 'gap-12 md:gap-16';
+      default: return 'gap-6 md:gap-8';
     }
   };
 
@@ -633,7 +649,8 @@ export default function StorePage() {
                   
                   // 간격 설정
                   const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
-                                 layout.spacing === 'loose' ? 'gap-8' : 'gap-6';
+                                 layout.spacing === 'loose' ? 'gap-8' : 
+                                 layout.spacing === 'extra-loose' ? 'gap-12' : 'gap-6';
                   
                   // 높이 비율 설정
                   const aspectClass = layout.height_ratio === 'portrait' ? 'aspect-[3/4]' :
@@ -803,7 +820,7 @@ export default function StorePage() {
                   );
                 } else if (design.layout_style === 'masonry') {
                   return (
-                    <div className="columns-2 md:columns-3 gap-6 md:gap-8">
+                    <div className={`columns-2 md:columns-3 ${getProductSpacing()}`}>
                       {/* 제품 등록 카드 */}
                       {isOwner && (
                         <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer break-inside-avoid mb-6">
@@ -841,7 +858,9 @@ export default function StorePage() {
                   const gridStyle = productsPerRow > 4 ? {
                     display: 'grid',
                     gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
-                    gap: '1.5rem'
+                    gap: design.product_spacing === 'tight' ? '0.5rem' :
+                         design.product_spacing === 'loose' ? '2rem' :
+                         design.product_spacing === 'extra-loose' ? '3rem' : '1.5rem'
                   } : {};
                   
                   // 반응형 클래스 개선: 모바일에서도 적절한 컬럼 수 표시
@@ -849,8 +868,8 @@ export default function StorePage() {
                   const tabletColumns = Math.min(productsPerRow, 3); // 태블릿에서는 최대 3개
                   
                   const gridClass = productsPerRow <= 4 
-                    ? `grid gap-6 md:gap-8 grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
-                    : 'gap-6 md:gap-8';
+                    ? `grid ${getProductSpacing()} grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
+                    : getProductSpacing();
                   
                   return (
                     <div 

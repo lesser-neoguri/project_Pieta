@@ -45,7 +45,7 @@ type StoreDesign = {
       layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner';
       columns: number; // 1-6 컬럼
       card_style: 'default' | 'compact' | 'detailed' | 'large';
-      spacing: 'tight' | 'normal' | 'loose';
+      spacing: 'tight' | 'normal' | 'loose' | 'extra-loose';
       height_ratio?: 'square' | 'portrait' | 'landscape' | 'auto';
       show_text_overlay?: boolean;
       background_color?: string;
@@ -54,6 +54,8 @@ type StoreDesign = {
   };
   products_per_row?: number; // 기본 행당 제품 수
   enable_custom_rows?: boolean; // 커스텀 행 레이아웃 활성화
+  // 상품 간격 설정 추가
+  product_spacing?: 'tight' | 'normal' | 'loose' | 'extra-loose';
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -115,7 +117,8 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
     }
   },
   products_per_row: 4,
-  enable_custom_rows: false
+  enable_custom_rows: false,
+  product_spacing: 'normal'
 };
 
 export default function StoreDesignForm({ storeId }: { storeId: string }) {
@@ -197,7 +200,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             products_per_row: typeof existingDesign.products_per_row === 'string' 
               ? parseInt(existingDesign.products_per_row) 
               : (existingDesign.products_per_row || 4),
-            enable_custom_rows: existingDesign.enable_custom_rows || false
+            enable_custom_rows: existingDesign.enable_custom_rows || false,
+            product_spacing: existingDesign.product_spacing || 'normal'
           };
           setDesign(convertedDesign);
         } else {
@@ -257,7 +261,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
         // 새로운 필드들 추가
         row_layouts: design.row_layouts || {},
         products_per_row: design.products_per_row || 4,
-        enable_custom_rows: design.enable_custom_rows || false
+        enable_custom_rows: design.enable_custom_rows || false,
+        product_spacing: design.product_spacing || 'normal'
       };
 
       let result;
@@ -441,6 +446,16 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       case 'medium': return 'text-sm md:text-base';
       case 'large': return 'text-base md:text-lg';
       default: return 'text-sm md:text-base';
+    }
+  };
+
+  const getProductSpacing = () => {
+    switch (design.product_spacing) {
+      case 'tight': return 'gap-2 md:gap-3';
+      case 'normal': return 'gap-6 md:gap-8';
+      case 'loose': return 'gap-8 md:gap-12';
+      case 'extra-loose': return 'gap-12 md:gap-16';
+      default: return 'gap-6 md:gap-8';
     }
   };
 
@@ -706,6 +721,33 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       <option value={6}>6개</option>
                     </select>
                   </div>
+                  
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                      상품 간격
+                    </label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { value: 'tight', label: '좁게' },
+                        { value: 'normal', label: '보통' },
+                        { value: 'loose', label: '넓게' },
+                        { value: 'extra-loose', label: '더 넓게' }
+                      ].map(({ value, label }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => updateDesign('product_spacing', value)}
+                          className={`p-2 border text-xs uppercase transition-all ${
+                            design.product_spacing === value
+                              ? 'border-gray-900 bg-gray-900 text-white'
+                              : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -861,8 +903,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       {/* 간격 */}
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">간격</label>
-                        <div className="grid grid-cols-3 gap-1">
-                          {['tight', 'normal', 'loose'].map((spacing) => (
+                        <div className="grid grid-cols-2 gap-1">
+                          {['tight', 'normal', 'loose', 'extra-loose'].map((spacing) => (
                             <button
                               key={spacing}
                               type="button"
@@ -882,7 +924,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                                   : 'border-gray-200 text-gray-600 hover:border-gray-400'
                               }`}
                             >
-                              {spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : '넓게'}
+                              {spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : spacing === 'loose' ? '넓게' : '더 넓게'}
                             </button>
                           ))}
                         </div>
@@ -1412,7 +1454,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       
                       // 간격 설정
                       const gapClass = layout.spacing === 'tight' ? 'gap-2' : 
-                                     layout.spacing === 'loose' ? 'gap-8' : 'gap-6';
+                                     layout.spacing === 'loose' ? 'gap-8' : 
+                                     layout.spacing === 'extra-loose' ? 'gap-12' : 'gap-6';
                       
                       // 높이 비율 설정
                       const aspectClass = layout.height_ratio === 'portrait' ? 'aspect-[3/4]' :
@@ -1604,7 +1647,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       );
                     } else if (design.layout_style === 'masonry') {
                       return (
-                        <div className="columns-2 md:columns-3 gap-6 md:gap-8">
+                        <div className={`columns-2 md:columns-3 ${getProductSpacing()}`}>
                           {/* 제품 등록 카드 */}
                           <div className="group cursor-pointer break-inside-avoid mb-6">
                             <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
@@ -1669,7 +1712,9 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       const gridStyle = productsPerRow > 4 ? {
                         display: 'grid',
                         gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
-                        gap: '1.5rem'
+                        gap: design.product_spacing === 'tight' ? '0.5rem' :
+                             design.product_spacing === 'loose' ? '2rem' :
+                             design.product_spacing === 'extra-loose' ? '3rem' : '1.5rem'
                       } : {};
                       
                       // 반응형 클래스 개선: 모바일에서도 적절한 컬럼 수 표시
@@ -1677,8 +1722,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       const tabletColumns = Math.min(productsPerRow, 3); // 태블릿에서는 최대 3개
                       
                       const gridClass = productsPerRow <= 4 
-                        ? `grid gap-6 md:gap-8 grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
-                        : 'gap-6 md:gap-8';
+                        ? `grid ${getProductSpacing()} grid-cols-${mobileColumns} sm:grid-cols-${tabletColumns} md:grid-cols-${productsPerRow}`
+                        : getProductSpacing();
                       
                       return (
                         <div 
