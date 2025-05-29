@@ -733,7 +733,7 @@ export default function StorePage() {
                           <div key={product.id} className={cardClass}>
                             <ProductCard
                               product={product as ProductCardData}
-                              variant={layout.card_style as any}
+                              variant="compact"
                               showRating={true}
                               showActions={isOwner}
                               isOwner={isOwner}
@@ -751,43 +751,131 @@ export default function StorePage() {
               })()
             ) : (
               // 기본 레이아웃
-              <div className={`grid gap-6 md:gap-8 ${
-                design.layout_style === 'grid' 
-                  ? `grid-cols-2 md:grid-cols-${Math.min(design.products_per_row || 4, 6)}` 
-                  : design.layout_style === 'list'
-                  ? 'grid-cols-1'
-                  : 'grid-cols-2 md:grid-cols-3'
-              }`}>
-                {/* 제품 등록 카드 */}
-                {isOwner && (
-                  <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
-                    <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
-                      <div className="text-center">
-                        <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
-                          제품 등록
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                )}
+              (() => {
+                const productsPerRow = design.products_per_row || 4;
                 
-                {/* 실제 제품 카드들 */}
-                {sortedProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product as ProductCardData}
-                    variant={design.product_card_style as any}
-                    showRating={true}
-                    showActions={isOwner}
-                    isOwner={isOwner}
-                    onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
-                    onDelete={() => setDeleteProductId(product.id)}
-                  />
-                ))}
-              </div>
+                // layout_style에 따른 처리
+                if (design.layout_style === 'list') {
+                  return (
+                    <div className="space-y-4">
+                      {/* 제품 등록 카드 */}
+                      {isOwner && (
+                        <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
+                          <div className="flex items-center space-x-4 p-4 border border-gray-200 hover:shadow-lg transition-shadow">
+                            <div className="w-24 h-24 bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                              <svg className="w-8 h-8 text-gray-400 group-hover:text-gray-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                                제품 등록
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      )}
+                      
+                      {/* 실제 제품 카드들 */}
+                      {sortedProducts.map((product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product as ProductCardData}
+                          variant="compact"
+                          showRating={true}
+                          showActions={isOwner}
+                          isOwner={isOwner}
+                          onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                          onDelete={() => setDeleteProductId(product.id)}
+                        />
+                      ))}
+                    </div>
+                  );
+                } else if (design.layout_style === 'masonry') {
+                  return (
+                    <div className="columns-2 md:columns-3 gap-6 md:gap-8">
+                      {/* 제품 등록 카드 */}
+                      {isOwner && (
+                        <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer break-inside-avoid mb-6">
+                          <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                            <div className="text-center">
+                              <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                              </svg>
+                              <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                                제품 등록
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      )}
+                      
+                      {/* 실제 제품 카드들 */}
+                      {sortedProducts.map((product) => (
+                        <div key={product.id} className="break-inside-avoid mb-6">
+                          <ProductCard
+                            product={product as ProductCardData}
+                            variant="compact"
+                            showRating={true}
+                            showActions={isOwner}
+                            isOwner={isOwner}
+                            onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                            onDelete={() => setDeleteProductId(product.id)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                } else {
+                  // grid 레이아웃 (기본)
+                  const gridStyle = productsPerRow > 4 ? {
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
+                    gap: '1.5rem'
+                  } : {};
+                  
+                  const gridClass = productsPerRow <= 4 
+                    ? `grid gap-6 md:gap-8 grid-cols-2 md:grid-cols-${productsPerRow}`
+                    : 'gap-6 md:gap-8';
+                  
+                  return (
+                    <div 
+                      className={gridClass}
+                      style={gridStyle}
+                    >
+                      {/* 제품 등록 카드 */}
+                      {isOwner && (
+                        <Link href={`/store/${store.id}/product/create`} className="group cursor-pointer">
+                          <div className="aspect-square bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                            <div className="text-center">
+                              <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
+                              </svg>
+                              <span className="text-sm text-gray-500 group-hover:text-gray-600 transition-colors font-medium uppercase tracking-wider">
+                                제품 등록
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      )}
+                      
+                      {/* 실제 제품 카드들 */}
+                      {sortedProducts.map((product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product as ProductCardData}
+                          variant="compact"
+                          showRating={true}
+                          showActions={isOwner}
+                          isOwner={isOwner}
+                          onEdit={() => router.push(`/store/${store.id}/product/${product.id}/edit`)}
+                          onDelete={() => setDeleteProductId(product.id)}
+                        />
+                      ))}
+                    </div>
+                  );
+                }
+              })()
             )}
           </div>
         )}
