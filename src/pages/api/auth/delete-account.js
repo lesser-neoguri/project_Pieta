@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 
 export default async function handler(req, res) {
   if (req.method !== 'DELETE') {
@@ -16,8 +16,24 @@ export default async function handler(req, res) {
       });
     }
 
-    // Supabase 클라이언트 초기화
-    const supabase = createServerSupabaseClient({ req, res });
+    // Supabase 클라이언트 초기화 (새로운 방식)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        cookies: {
+          get: (name) => {
+            return req.cookies[name];
+          },
+          set: (name, value, options) => {
+            res.setHeader('Set-Cookie', `${name}=${value}; ${Object.entries(options).map(([k, v]) => `${k}=${v}`).join('; ')}`);
+          },
+          remove: (name, options) => {
+            res.setHeader('Set-Cookie', `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; ${Object.entries(options).map(([k, v]) => `${k}=${v}`).join('; ')}`);
+          },
+        },
+      }
+    );
 
     // 사용자 존재 여부 확인 (profiles 테이블 조회)
     const { data: profileData, error: profileError } = await supabase

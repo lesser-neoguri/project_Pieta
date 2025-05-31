@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -14,7 +14,7 @@ type AccountInfo = {
   canReactivate: boolean;
 };
 
-export default function AccountReactivatePage() {
+function AccountReactivateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -318,5 +318,22 @@ export default function AccountReactivatePage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function AccountReactivatePage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="w-full max-w-md">
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-500">페이지를 로딩 중입니다...</p>
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <AccountReactivateContent />
+    </Suspense>
   );
 } 
