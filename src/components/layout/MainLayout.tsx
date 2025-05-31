@@ -14,7 +14,7 @@ export default function MainLayout({
   const navbarHeight = "mt-16 sm:mt-20 md:mt-24"; // 네비게이션 바 높이에 맞게 마진 설정
 
   return (
-    <div className={`min-h-screen flex flex-col bg-white ${navbarHeight}`}>
+    <div className={`min-h-screen flex flex-col bg-white custom-scrollbar-vertical ${navbarHeight}`}>
       <main className={`flex-1 ${centered ? 'flex items-center justify-center' : ''} px-4 py-6`}>
         {children}
       </main>

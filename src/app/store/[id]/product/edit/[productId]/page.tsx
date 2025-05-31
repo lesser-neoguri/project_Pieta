@@ -723,7 +723,7 @@ export default function EditProductPage() {
                     <div className="absolute inset-0 flex items-center justify-center">
                       <button
                         onClick={handleRemoveImage}
-                        className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                        className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -769,7 +769,7 @@ export default function EditProductPage() {
                     />
                     <button
                       onClick={() => handleRemoveExistingImage(image.id)}
-                      className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                      className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -789,7 +789,7 @@ export default function EditProductPage() {
                     />
                     <button
                       onClick={() => handleRemoveAdditionalImage(index)}
-                      className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
+                      className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity"
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -878,7 +878,7 @@ export default function EditProductPage() {
                         />
                       <button
                         onClick={() => handleRemoveExistingImage(image.id)}
-                    className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
+                    className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
                       >
                     <X className="w-5 h-5" />
                       </button>
@@ -898,7 +898,7 @@ export default function EditProductPage() {
                         />
                       <button
                         onClick={() => handleRemoveAdditionalImage(index)}
-                    className="absolute top-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
+                    className="absolute bottom-4 right-4 p-2 bg-black bg-opacity-50 rounded-full text-white hover:bg-opacity-70 transition-opacity opacity-0 group-hover:opacity-100"
                       >
                     <X className="w-5 h-5" />
                       </button>

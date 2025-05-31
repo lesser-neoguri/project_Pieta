@@ -12,7 +12,7 @@
     "@chakra-ui/react": "^2.8.2",
     "@emotion/react": "^11.11.3",
     "@emotion/styled": "^11.11.0",
-    "@supabase/auth-helpers-nextjs": "^0.8.7",
+    "@hello-pangea/dnd": "^18.0.1",
     "@supabase/mcp-server-supabase": "^0.3.6",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
@@ -26,6 +26,7 @@
     "@types/react-image-crop": "^8.1.6",
     "axios": "^1.8.3",
     "cheerio": "^1.0.0",
+    "clsx": "^2.1.1",
     "dompurify": "^3.2.5",
     "framer-motion": "^11.0.6",
     "lucide-react": "^0.487.0",
@@ -40,6 +41,7 @@
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
+    "tailwind-merge": "^3.3.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

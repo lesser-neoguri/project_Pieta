@@ -73,7 +73,7 @@ type StoreDesign = {
   // 각 층별 레이아웃 설정
   row_layouts?: {
     [rowIndex: number]: {
-      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner';
+      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner' | 'text';
       columns: number;
       card_style: 'default' | 'compact' | 'detailed' | 'large';
       spacing: 'tight' | 'normal' | 'loose';
@@ -81,6 +81,22 @@ type StoreDesign = {
       show_text_overlay?: boolean;
       background_color?: string;
       text_alignment?: 'left' | 'center' | 'right';
+      featured_image_url?: string;
+      linked_product_id?: string;
+      featured_size?: 'hero' | 'large' | 'medium';
+      overlay_position?: 'center' | 'bottom' | 'top';
+      // 텍스트 레이아웃 필드들
+      text_content?: string;
+      text_size?: 'small' | 'medium' | 'large' | 'xl' | 'xxl';
+      text_color?: string;
+      text_weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+      text_style?: 'paragraph' | 'heading' | 'quote' | 'highlight';
+      max_width?: 'narrow' | 'medium' | 'wide' | 'full';
+      padding?: 'small' | 'medium' | 'large' | 'xl';
+      // 배너 레이아웃 필드들
+      banner_height?: 'small' | 'medium' | 'large' | 'full';
+      banner_style?: 'image' | 'gradient' | 'solid';
+      call_to_action?: string;
     };
   };
   products_per_row?: number;
@@ -139,6 +155,7 @@ export default function StorePage() {
   const [deleteProductId, setDeleteProductId] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [sortBy, setSortBy] = useState('newest');
+  const [showInfoPopup, setShowInfoPopup] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStoreAndProducts = async () => {
@@ -234,6 +251,7 @@ export default function StorePage() {
           };
           console.log('Loaded design data:', convertedDesign);
           console.log('Final products_per_row:', convertedDesign.products_per_row, 'type:', typeof convertedDesign.products_per_row);
+          console.log('Row layouts loaded:', convertedDesign.row_layouts);
           setDesign(convertedDesign);
         } else {
           console.log('No design data found, using default design');
@@ -253,6 +271,11 @@ export default function StorePage() {
           setProducts(productsData);
           logger.debug(`${productsData?.length || 0}개의 제품을 불러왔습니다.`);
         }
+
+        // 현재 사용자가 상점 소유자인지 확인
+        if (user && user.id === storeData.vendor_id) {
+          setIsOwner(true);
+        }
       } catch (error: any) {
         logger.error('데이터 로딩 중 오류 발생:', error);
         setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -262,16 +285,24 @@ export default function StorePage() {
     };
 
     fetchStoreAndProducts();
-  }, [storeId]);
+  }, [storeId, user]);
 
-  // 사용자 권한 확인을 별도 useEffect로 분리
+  // 팝업 외부 클릭 시 닫기
   useEffect(() => {
-    if (user && store && user.id === store.vendor_id) {
-      setIsOwner(true);
-    } else {
-      setIsOwner(false);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showInfoPopup) {
+        setShowInfoPopup(null);
+      }
+    };
+
+    if (showInfoPopup) {
+      document.addEventListener('click', handleClickOutside);
     }
-  }, [user, store]);
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showInfoPopup]);
 
   // 제품 이미지 삭제 함수
   const handleRemoveImage = async (imageUrl: string) => {
@@ -552,30 +583,34 @@ export default function StorePage() {
             <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600">
               <div className="flex items-center">
                 <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span>{store.store_address}</span>
-              </div>
-              {design.show_contact_info && store.store_phone && (
-                <div className="flex items-center">
-                  <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  <span>{store.store_phone}</span>
-                </div>
-              )}
-              <div className="flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                 </svg>
-                <span>제품 {products.length}개</span>
+                <span>총 {products.length}개 제품</span>
               </div>
-              <div className="flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>가입일 {new Date(store.created_at).toLocaleDateString('ko-KR')}</span>
+              <div className="flex items-center relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowInfoPopup(showInfoPopup === 'info' ? null : 'info');
+                  }}
+                  className="flex items-center hover:text-gray-800 transition-colors"
+                >
+                  <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                {showInfoPopup === 'info' && (
+                  <div className="absolute bottom-full left-0 mb-2 bg-black text-white text-xs px-3 py-2 rounded shadow-lg whitespace-nowrap z-10">
+                    <div className="space-y-1">
+                      <div>주소: {store.store_address}</div>
+                      {design.show_contact_info && store.store_phone && (
+                        <div>전화번호: {store.store_phone}</div>
+                      )}
+                      <div>가입일: {new Date(store.created_at).toLocaleDateString('ko-KR')}</div>
+                    </div>
+                    <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-black"></div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -608,48 +643,6 @@ export default function StorePage() {
 
       {/* 제품 목록 섹션 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* 섹션 헤더 */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12 space-y-4 md:space-y-0">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-light tracking-wide mb-2" style={{ color: design.text_color }}>
-              컬렉션
-            </h2>
-            <p className="text-gray-600 text-sm">
-              {store.store_name}에서 엄선한 {products.length}개의 제품을 만나보세요
-            </p>
-          </div>
-          
-          {/* 정렬 옵션 */}
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-2xl font-light tracking-wide" style={{ color: design.text_color }}>
-              제품 ({products.length}개)
-            </h2>
-            
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-            >
-              <option value="newest">최신순</option>
-              <option value="oldest">오래된순</option>
-              <option value="price-low">가격 낮은순</option>
-              <option value="price-high">가격 높은순</option>
-              <option value="name">이름순</option>
-            </select>
-          </div>
-
-          {/* 디버깅 정보 표시 */}
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
-            <div className="font-semibold text-yellow-800 mb-2">디자인 설정 정보:</div>
-            <div className="text-yellow-700 space-y-1">
-              <div>products_per_row: {design.products_per_row} (타입: {typeof design.products_per_row})</div>
-              <div>layout_style: {design.layout_style}</div>
-              <div>product_spacing: {design.product_spacing}</div>
-              <div>enable_custom_rows: {design.enable_custom_rows ? 'true' : 'false'}</div>
-            </div>
-          </div>
-        </div>
-
         {/* 제품 그리드 */}
         {products.length === 0 ? (
           <div className="text-center py-20">
@@ -680,7 +673,6 @@ export default function StorePage() {
               // 커스텀 행 레이아웃
               (() => {
                 const allProducts = [
-                  // 제품 등록 카드를 첫 번째에 추가 (소유자인 경우만)
                   ...(isOwner ? [{ id: 'add-product', isAddCard: true }] : []),
                   ...sortedProducts
                 ];
@@ -692,15 +684,38 @@ export default function StorePage() {
                 // 각 행별로 제품 배치
                 Object.entries(rowLayouts).forEach(([rowIndexStr, rowLayout]) => {
                   const rowIndex = parseInt(rowIndexStr);
-                  const productsInRow = allProducts.slice(productIndex, productIndex + rowLayout.columns);
                   
-                  if (productsInRow.length > 0) {
+                  // 텍스트와 배너 레이아웃은 제품을 소비하지 않음
+                  if (rowLayout.layout_type === 'text' || rowLayout.layout_type === 'banner') {
+                    rows.push({
+                      index: rowIndex,
+                      layout: rowLayout,
+                      products: []
+                    });
+                    return;
+                  }
+                  
+                  // 피처드 레이아웃에 이미지가 있는 경우도 제품을 소비하지 않음
+                  if (rowLayout.layout_type === 'featured' && rowLayout.featured_image_url) {
+                    rows.push({
+                      index: rowIndex,
+                      layout: rowLayout,
+                      products: []
+                    });
+                    return;
+                  }
+                  
+                  // 제품을 사용하는 레이아웃의 경우
+                  const productsNeeded = rowLayout.columns || 4;
+                  const productsInRow = allProducts.slice(productIndex, productIndex + productsNeeded);
+                  
+                  if (productsInRow.length > 0 || rowLayout.layout_type === 'featured') {
                     rows.push({
                       index: rowIndex,
                       layout: rowLayout,
                       products: productsInRow
                     });
-                    productIndex += rowLayout.columns;
+                    productIndex += productsNeeded;
                   }
                 });
 
@@ -735,7 +750,149 @@ export default function StorePage() {
                          layout.spacing === 'extra-loose' ? '3rem' : '1.5rem'
                   } : {};
                   
-                  // 레이아웃 타입별 스타일
+                  // 레이아웃 타입별 처리
+                  if (layout.layout_type === 'text') {
+                    // 텍스트 레이아웃
+                    const textSizeClass = layout.text_size === 'small' ? 'text-sm' :
+                                         layout.text_size === 'large' ? 'text-lg' :
+                                         layout.text_size === 'xl' ? 'text-xl' :
+                                         layout.text_size === 'xxl' ? 'text-2xl' : 'text-base';
+                    const textWeightClass = layout.text_weight === 'medium' ? 'font-medium' :
+                                          layout.text_weight === 'semibold' ? 'font-semibold' :
+                                          layout.text_weight === 'bold' ? 'font-bold' : 'font-normal';
+                    const textAlignClass = layout.text_alignment === 'center' ? 'text-center' :
+                                         layout.text_alignment === 'right' ? 'text-right' : 'text-left';
+                    const maxWidthClass = layout.max_width === 'narrow' ? 'max-w-2xl' :
+                                        layout.max_width === 'wide' ? 'max-w-6xl' :
+                                        layout.max_width === 'full' ? 'max-w-full' : 'max-w-4xl';
+                    const paddingClass = layout.padding === 'small' ? 'py-4' :
+                                       layout.padding === 'large' ? 'py-12' :
+                                       layout.padding === 'xl' ? 'py-16' : 'py-8';
+                    
+                    return (
+                      <div 
+                        key={row.index} 
+                        className={`${paddingClass} ${textAlignClass}`}
+                        style={{ backgroundColor: layout.background_color }}
+                      >
+                        <div className={`${maxWidthClass} mx-auto px-4`}>
+                          <div 
+                            className={`${textSizeClass} ${textWeightClass} leading-relaxed whitespace-pre-wrap`}
+                            style={{ color: layout.text_color || '#000000' }}
+                          >
+                            {layout.text_content || '텍스트를 입력하세요...'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (layout.layout_type === 'banner') {
+                    // 배너 레이아웃
+                    const bannerHeightClass = layout.banner_height === 'small' ? 'h-32' :
+                                            layout.banner_height === 'large' ? 'h-64' :
+                                            layout.banner_height === 'full' ? 'h-screen' : 'h-48';
+                    
+                    return (
+                      <div 
+                        key={row.index} 
+                        className={`${bannerHeightClass} relative overflow-hidden flex items-center justify-center`}
+                        style={{ 
+                          backgroundColor: layout.background_color || '#f3f4f6',
+                          backgroundImage: layout.banner_style === 'gradient' 
+                            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                            : layout.banner_style === 'solid' 
+                            ? 'none' 
+                            : 'url("https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&h=400&fit=crop")',
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }}
+                      >
+                        <div className="text-center text-white z-10">
+                          <h3 className="text-2xl md:text-4xl font-bold mb-4">
+                            특별 프로모션
+                          </h3>
+                          <p className="text-lg mb-6 opacity-90">
+                            지금 구매하시면 특별 할인 혜택을 받으실 수 있습니다
+                          </p>
+                          {layout.call_to_action && (
+                            <button className="px-8 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                              {layout.call_to_action}
+                            </button>
+                          )}
+                        </div>
+                        <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+                      </div>
+                    );
+                  }
+
+                  if (layout.layout_type === 'featured' && layout.featured_image_url) {
+                    // 피처드 이미지가 있는 경우
+                    return (
+                      <div 
+                        key={row.index}
+                        className="relative w-full cursor-pointer group overflow-hidden"
+                        style={{ 
+                          height: layout.featured_size === 'hero' ? '80vh' : 
+                                 layout.featured_size === 'large' ? '400px' : '300px'
+                        }}
+                        onClick={() => {
+                          if (layout.linked_product_id) {
+                            router.push(`/store/${store.id}/product/${layout.linked_product_id}`);
+                          }
+                        }}
+                      >
+                        <img
+                          src={layout.featured_image_url}
+                          alt="Featured content"
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        
+                        {/* 오버레이 */}
+                        <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-300"></div>
+                        
+                        {/* 텍스트 오버레이 */}
+                        {layout.show_text_overlay && (
+                          <div className={`absolute inset-0 flex ${
+                            layout.overlay_position === 'top' ? 'items-start pt-8' :
+                            layout.overlay_position === 'bottom' ? 'items-end pb-8' : 'items-center'
+                          } justify-center`}>
+                            <div className="text-center text-white z-10">
+                              <h3 className="text-xl md:text-3xl font-bold mb-2">
+                                {layout.linked_product_id 
+                                  ? sortedProducts.find(p => p.id === layout.linked_product_id)?.product_name || '특별 제품'
+                                  : '특별 제품'
+                                }
+                              </h3>
+                              <p className="text-sm md:text-base opacity-90 mb-4">
+                                {layout.linked_product_id 
+                                  ? `₩${sortedProducts.find(p => p.id === layout.linked_product_id)?.price.toLocaleString() || '0'}`
+                                  : '프리미엄 컬렉션'
+                                }
+                              </p>
+                              {layout.linked_product_id && (
+                                <div className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 text-white text-sm font-medium hover:bg-opacity-30 transition-all duration-300">
+                                  자세히 보기
+                                  <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 클릭 힌트 */}
+                        {layout.linked_product_id && (
+                          <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            클릭하여 제품 보기
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // 일반 제품 그리드 레이아웃 (grid, list, masonry, featured without image)
                   let containerClass = '';
                   let cardClass = '';
                   
@@ -743,10 +900,6 @@ export default function StorePage() {
                     case 'featured':
                       containerClass = `grid ${gridCols} ${gapClass}`;
                       cardClass = layout.card_style === 'large' ? 'transform hover:scale-105' : '';
-                      break;
-                    case 'banner':
-                      containerClass = `grid ${gridCols} ${gapClass}`;
-                      cardClass = 'relative overflow-hidden';
                       break;
                     case 'masonry':
                       containerClass = `columns-${layout.columns} ${gapClass}`;

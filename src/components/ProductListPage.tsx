@@ -318,10 +318,10 @@ export default function ProductListPage({
 
   return (
     <MainLayout centered={false}>
-      <div className="min-h-screen bg-white -mt-16 sm:-mt-20 md:-mt-24">
-        {/* 메인 비주얼 - 스크롤에 따라 높이가 변하도록 수정 */}
+      <div className="min-h-screen bg-white -mt-16 sm:-mt-20 md:-mt-24 custom-scrollbar-vertical">
+        {/* 메인 비주얼 - 스크롤에 따라 높이가 변하도록 수정, 양옆 마진 제거 */}
         <div 
-          className="relative overflow-hidden w-full transition-all duration-300 ease-out will-change-[height]"
+          className="relative overflow-hidden w-screen ml-[calc(-50vw+50%)] transition-all duration-300 ease-out will-change-[height]"
           style={{ height: `${bannerHeight}vh` }}
         >
           <div className="absolute inset-0">
@@ -332,8 +332,8 @@ export default function ProductListPage({
             />
           </div>
           <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/30 to-black/60"></div>
-          <div className="relative h-full flex items-center justify-center text-center px-0">
-            <div className="w-full max-w-5xl mx-auto">
+          <div className="relative h-full flex items-center justify-center text-center">
+            <div className="w-full max-w-5xl mx-auto px-6">
               <p className="text-sm md:text-base text-white/90 uppercase tracking-[0.4em] mb-6 font-light">Exclusive Collection</p>
               <h1 className="text-5xl md:text-7xl font-extralight tracking-[0.2em] uppercase text-white mb-8">{title}</h1>
               <div className="w-40 h-[1px] bg-white/40 mx-auto mb-10"></div>
@@ -348,7 +348,7 @@ export default function ProductListPage({
         <div className="sticky top-0 z-10 bg-white/90 border-b border-gray-100 shadow-sm backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex items-center justify-between py-6">
-              <div className="overflow-x-auto flex-1 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <div className="overflow-x-auto flex-1 custom-scrollbar-horizontal">
                 <div className="flex space-x-12 pb-1 min-w-max">
                   {categories.map((category) => (
                     <button

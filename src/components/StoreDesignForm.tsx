@@ -21,7 +21,7 @@ type StoreDesign = {
   show_store_description: boolean;
   show_contact_info: boolean;
   show_business_hours: boolean;
-  banner_height: 'small' | 'medium' | 'large';
+  banner_height: 'small' | 'medium' | 'large' | 'full';
   logo_position: 'left' | 'center' | 'right';
   title_font_size: 'small' | 'medium' | 'large' | 'xl';
   description_font_size: 'small' | 'medium' | 'large';
@@ -42,14 +42,47 @@ type StoreDesign = {
   // 각 층별 레이아웃 설정
   row_layouts?: {
     [rowIndex: number]: {
-      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner';
-      columns: number; // 1-6 컬럼
-      card_style: 'default' | 'compact' | 'detailed' | 'large';
+      layout_type: 'grid' | 'list' | 'masonry' | 'featured' | 'banner' | 'text';
+      
+      // 공통 필드
       spacing: 'tight' | 'normal' | 'loose' | 'extra-loose';
-      height_ratio?: 'square' | 'portrait' | 'landscape' | 'auto';
-      show_text_overlay?: boolean;
       background_color?: string;
       text_alignment?: 'left' | 'center' | 'right';
+      
+      // GRID 전용 필드
+      columns?: number; // 1-6 컬럼 (grid, masonry에서만 사용)
+      card_style?: 'default' | 'compact' | 'detailed' | 'large';
+      height_ratio?: 'square' | 'portrait' | 'landscape' | 'auto';
+      
+      // FEATURED 전용 필드 (1-2개 제품만 강조)
+      featured_size?: 'hero' | 'large' | 'medium'; // 피처드 크기
+      show_text_overlay?: boolean;
+      overlay_position?: 'center' | 'bottom' | 'top';
+      featured_image_url?: string; // 피처드 이미지 URL
+      linked_product_id?: string; // 연결된 제품 ID
+      
+      // LIST 전용 필드
+      list_style?: 'horizontal' | 'vertical' | 'card';
+      show_description?: boolean;
+      show_price_prominent?: boolean;
+      
+      // MASONRY 전용 필드
+      masonry_columns?: number; // 2-5 컬럼
+      min_height?: 'small' | 'medium' | 'large';
+      
+      // BANNER 전용 필드
+      banner_height?: 'small' | 'medium' | 'large' | 'full';
+      banner_style?: 'image' | 'gradient' | 'solid';
+      call_to_action?: string;
+      
+      // TEXT 전용 필드 (컬럼 개념 제거)
+      text_content?: string;
+      text_size?: 'small' | 'medium' | 'large' | 'xl' | 'xxl';
+      text_color?: string;
+      text_weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+      text_style?: 'paragraph' | 'heading' | 'quote' | 'highlight';
+      max_width?: 'narrow' | 'medium' | 'wide' | 'full';
+      padding?: 'small' | 'medium' | 'large' | 'xl';
     };
   };
   products_per_row?: number; // 기본 행당 제품 수
@@ -92,32 +125,35 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
   row_layouts: {
     0: {
       layout_type: 'featured',
-      columns: 1,
-      card_style: 'large',
+      featured_size: 'large',
       spacing: 'normal',
-      height_ratio: 'landscape',
       show_text_overlay: true,
+      overlay_position: 'center',
       text_alignment: 'center'
     },
     1: {
+      layout_type: 'text',
+      spacing: 'normal',
+      text_content: '프리미엄 컬렉션\n\n엄선된 제품들로 구성된 특별한 컬렉션을 만나보세요.\n최고의 품질과 디자인으로 여러분의 일상을 더욱 특별하게 만들어드립니다.',
+      text_size: 'large',
+      text_color: '#333333',
+      text_weight: 'medium',
+      text_style: 'paragraph',
+      max_width: 'medium',
+      padding: 'large',
+      text_alignment: 'center'
+    },
+    2: {
       layout_type: 'grid',
       columns: 4,
       card_style: 'default',
       spacing: 'normal',
       height_ratio: 'square',
       text_alignment: 'left'
-    },
-    2: {
-      layout_type: 'grid',
-      columns: 3,
-      card_style: 'detailed',
-      spacing: 'loose',
-      height_ratio: 'portrait',
-      text_alignment: 'center'
     }
   },
   products_per_row: 4,
-  enable_custom_rows: false,
+  enable_custom_rows: true,
   product_spacing: 'normal'
 };
 
@@ -130,6 +166,23 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
   const [products, setProducts] = useState<any[]>([]);
   const [design, setDesign] = useState<StoreDesign>(defaultDesign as StoreDesign);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sortBy, setSortBy] = useState('newest');
+
+  // 제품 정렬 함수
+  const sortProducts = (products: any[], sortBy: string) => {
+    const sorted = [...products];
+    switch (sortBy) {
+      case 'price_asc':
+        return sorted.sort((a, b) => a.price - b.price);
+      case 'price_desc':
+        return sorted.sort((a, b) => b.price - a.price);
+      case 'rating':
+        return sorted.sort((a, b) => (b.average_rating || 0) - (a.average_rating || 0));
+      case 'newest':
+      default:
+        return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+  };
 
   useEffect(() => {
     const fetchStoreData = async () => {
@@ -956,29 +1009,58 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                           value={rowLayout.layout_type}
                           onChange={(e) => {
                             const currentLayouts = design.row_layouts || {};
+                            const newLayoutType = e.target.value as any;
+                            
+                            // 타입별 기본값 설정
+                            let defaultValues: any = {};
+                            switch (newLayoutType) {
+                              case 'grid':
+                                defaultValues = { columns: 4, card_style: 'default', height_ratio: 'square' };
+                                break;
+                              case 'featured':
+                                defaultValues = { featured_size: 'large', show_text_overlay: true };
+                                break;
+                              case 'list':
+                                defaultValues = { list_style: 'horizontal', show_description: true };
+                                break;
+                              case 'masonry':
+                                defaultValues = { masonry_columns: 3, min_height: 'medium' };
+                                break;
+                              case 'banner':
+                                defaultValues = { banner_height: 'medium', banner_style: 'image' };
+                                break;
+                              case 'text':
+                                defaultValues = { text_size: 'large', text_style: 'paragraph', max_width: 'medium', padding: 'large' };
+                                break;
+                            }
+                            
                             updateDesign('row_layouts', {
                               ...currentLayouts,
                               [rowIndex]: {
                                 ...rowLayout,
-                                layout_type: e.target.value as any
+                                layout_type: newLayoutType,
+                                ...defaultValues
                               }
                             });
                           }}
                           className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
                         >
-                          <option value="grid">그리드</option>
-                          <option value="list">리스트</option>
-                          <option value="masonry">메이슨리</option>
-                          <option value="featured">피처드</option>
-                          <option value="banner">배너</option>
+                          <option value="grid">🔲 그리드 - 균등한 제품 배치</option>
+                          <option value="featured">⭐ 피처드 - 특별한 제품 강조</option>
+                          <option value="list">📋 리스트 - 상세 정보와 함께</option>
+                          <option value="masonry">🧱 메이슨리 - 자연스러운 배치</option>
+                          <option value="banner">🎯 배너 - 프로모션 강조</option>
+                          <option value="text">📝 텍스트 - 브랜드 스토리</option>
                         </select>
                       </div>
                       
-                      {/* 컬럼 수 */}
+                      {/* GRID 전용 설정 */}
+                      {rowLayout.layout_type === 'grid' && (
+                        <>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">컬럼 수</label>
                         <select
-                          value={rowLayout.columns}
+                              value={rowLayout.columns || 4}
                           onChange={(e) => {
                             const currentLayouts = design.row_layouts || {};
                             updateDesign('row_layouts', {
@@ -991,7 +1073,6 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                           }}
                           className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
                         >
-                          <option value={1}>1개</option>
                           <option value={2}>2개</option>
                           <option value={3}>3개</option>
                           <option value={4}>4개</option>
@@ -1000,11 +1081,10 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                         </select>
                       </div>
                       
-                      {/* 카드 스타일 */}
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">카드 스타일</label>
                         <select
-                          value={rowLayout.card_style}
+                              value={rowLayout.card_style || 'default'}
                           onChange={(e) => {
                             const currentLayouts = design.row_layouts || {};
                             updateDesign('row_layouts', {
@@ -1024,13 +1104,68 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                         </select>
                       </div>
                       
-                      {/* 간격 */}
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">간격</label>
-                        <div className="grid grid-cols-3 gap-1">
-                          {['none', 'tight', 'normal', 'loose', 'extra-loose'].map((spacing) => (
+                            <label className="block text-xs text-gray-500 mb-1">높이 비율</label>
+                            <select
+                              value={rowLayout.height_ratio || 'square'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    height_ratio: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="square">정사각형</option>
+                              <option value="portrait">세로형</option>
+                              <option value="landscape">가로형</option>
+                              <option value="auto">자동</option>
+                            </select>
+                        </div>
+                        </>
+                      )}
+
+                      {/* FEATURED 전용 설정 */}
+                      {rowLayout.layout_type === 'featured' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">피처드 크기</label>
+                            <select
+                              value={rowLayout.featured_size || 'large'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    featured_size: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="hero">히어로 (전체 화면)</option>
+                              <option value="large">대형</option>
+                              <option value="medium">중형</option>
+                            </select>
+                          </div>
+
+                          {/* 피처드 이미지 업로드 */}
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-2">피처드 이미지</label>
+                            {rowLayout.featured_image_url ? (
+                              <div className="space-y-2">
+                                <div className="relative">
+                                  <img
+                                    src={rowLayout.featured_image_url}
+                                    alt="Featured preview"
+                                    className="w-full h-20 object-cover border border-gray-200"
+                                  />
                             <button
-                              key={spacing}
                               type="button"
                               onClick={() => {
                                 const currentLayouts = design.row_layouts || {};
@@ -1038,47 +1173,673 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                                   ...currentLayouts,
                                   [rowIndex]: {
                                     ...rowLayout,
-                                    spacing: spacing as any
+                                          featured_image_url: ''
                                   }
                                 });
                               }}
-                              className={`p-1 border text-xs transition-all ${
-                                rowLayout.spacing === spacing
-                                  ? 'border-gray-900 bg-gray-900 text-white'
-                                  : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                              }`}
-                            >
-                              {spacing === 'none' ? '없음' : spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : spacing === 'loose' ? '넓게' : '더 넓게'}
+                                    className="absolute bottom-1 right-1 w-6 h-6 bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600 transition-colors"
+                                  >
+                                    ×
                             </button>
-                          ))}
+                                </div>
+                                <label className="block">
+                                  <span className="text-xs text-gray-600 uppercase tracking-wide mb-2 block">
+                                    새 이미지로 변경
+                                  </span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+
+                                      if (!user) {
+                                        setMessage({
+                                          text: '이미지 업로드를 위해 로그인이 필요합니다.',
+                                          type: 'error'
+                                        });
+                                        return;
+                                      }
+
+                                      if (file.size > 5 * 1024 * 1024) {
+                                        setMessage({
+                                          text: '파일 크기는 5MB 이하여야 합니다.',
+                                          type: 'error'
+                                        });
+                                        return;
+                                      }
+
+                                      if (!file.type.startsWith('image/')) {
+                                        setMessage({
+                                          text: '이미지 파일만 업로드 가능합니다.',
+                                          type: 'error'
+                                        });
+                                        return;
+                                      }
+
+                                      setLoading(true);
+                                      setMessage(null);
+                                      
+                                      try {
+                                        const fileExt = file.name.split('.').pop();
+                                        const fileName = `featured/featured-${storeId}-${rowIndex}-${Date.now()}.${fileExt}`;
+                                        
+                                        const { data, error } = await supabase.storage
+                                          .from('images')
+                                          .upload(fileName, file, {
+                                            cacheControl: '3600',
+                                            upsert: false
+                                          });
+
+                                        if (error) {
+                                          throw new Error(`Storage error: ${error.message}`);
+                                        }
+
+                                        const { data: { publicUrl } } = supabase.storage
+                                          .from('images')
+                                          .getPublicUrl(fileName);
+
+                                        const currentLayouts = design.row_layouts || {};
+                                        updateDesign('row_layouts', {
+                                          ...currentLayouts,
+                                          [rowIndex]: {
+                                            ...rowLayout,
+                                            featured_image_url: publicUrl
+                                          }
+                                        });
+                                        
+                                        setMessage({
+                                          text: '피처드 이미지가 업로드되었습니다.',
+                                          type: 'success'
+                                        });
+                                      } catch (error: any) {
+                                        console.error('이미지 업로드 중 오류 발생:', error);
+                                        setMessage({
+                                          text: `이미지 업로드 실패: ${error.message || '알 수 없는 오류'}`,
+                                          type: 'error'
+                                        });
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }}
+                                    className="w-full text-xs border border-gray-200 file:mr-2 file:py-1 file:px-2 file:border-0 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
+                                  />
+                                </label>
+                              </div>
+                            ) : (
+                              <label className="block">
+                                <span className="text-xs text-gray-600 uppercase tracking-wide mb-2 block">
+                                  피처드 이미지 업로드
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+
+                                    if (!user) {
+                                      setMessage({
+                                        text: '이미지 업로드를 위해 로그인이 필요합니다.',
+                                        type: 'error'
+                                      });
+                                      return;
+                                    }
+
+                                    if (file.size > 5 * 1024 * 1024) {
+                                      setMessage({
+                                        text: '파일 크기는 5MB 이하여야 합니다.',
+                                        type: 'error'
+                                      });
+                                      return;
+                                    }
+
+                                    if (!file.type.startsWith('image/')) {
+                                      setMessage({
+                                        text: '이미지 파일만 업로드 가능합니다.',
+                                        type: 'error'
+                                      });
+                                      return;
+                                    }
+
+                                    setLoading(true);
+                                    setMessage(null);
+                                    
+                                    try {
+                                      const fileExt = file.name.split('.').pop();
+                                      const fileName = `featured/featured-${storeId}-${rowIndex}-${Date.now()}.${fileExt}`;
+                                      
+                                      const { data, error } = await supabase.storage
+                                        .from('images')
+                                        .upload(fileName, file, {
+                                          cacheControl: '3600',
+                                          upsert: false
+                                        });
+
+                                      if (error) {
+                                        throw new Error(`Storage error: ${error.message}`);
+                                      }
+
+                                      const { data: { publicUrl } } = supabase.storage
+                                        .from('images')
+                                        .getPublicUrl(fileName);
+
+                                      const currentLayouts = design.row_layouts || {};
+                                      updateDesign('row_layouts', {
+                                        ...currentLayouts,
+                                        [rowIndex]: {
+                                          ...rowLayout,
+                                          featured_image_url: publicUrl
+                                        }
+                                      });
+                                      
+                                      setMessage({
+                                        text: '피처드 이미지가 업로드되었습니다.',
+                                        type: 'success'
+                                      });
+                                    } catch (error: any) {
+                                      console.error('이미지 업로드 중 오류 발생:', error);
+                                      setMessage({
+                                        text: `이미지 업로드 실패: ${error.message || '알 수 없는 오류'}`,
+                                        type: 'error'
+                                      });
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }}
+                                  className="w-full text-xs border border-gray-200 file:mr-2 file:py-1 file:px-2 file:border-0 file:text-xs file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
+                                />
+                              </label>
+                            )}
+                            
+                            <p className="text-xs text-gray-500 mt-1">
+                              권장 크기: 1200x600px, 최대 5MB
+                            </p>
+                          </div>
+
+                          {/* 제품 연결 */}
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-2">연결할 제품</label>
+                            <div className="space-y-2">
+                              {rowLayout.linked_product_id ? (
+                                <div className="flex items-center justify-between p-2 bg-gray-50 border border-gray-200">
+                                  <span className="text-xs text-gray-700">
+                                    {products.find(p => p.id === rowLayout.linked_product_id)?.product_name || '제품을 찾을 수 없음'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const currentLayouts = design.row_layouts || {};
+                                      updateDesign('row_layouts', {
+                                        ...currentLayouts,
+                                        [rowIndex]: {
+                                          ...rowLayout,
+                                          linked_product_id: null
+                                        }
+                                      });
+                                    }}
+                                    className="text-xs text-red-600 hover:text-red-800"
+                                  >
+                                    연결 해제
+                                  </button>
+                                </div>
+                              ) : (
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      const currentLayouts = design.row_layouts || {};
+                                      updateDesign('row_layouts', {
+                                        ...currentLayouts,
+                                        [rowIndex]: {
+                                          ...rowLayout,
+                                          linked_product_id: e.target.value
+                                        }
+                                      });
+                                    }
+                                  }}
+                                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                                >
+                                  <option value="">제품 선택...</option>
+                                  {products.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                      {product.product_name} - ₩{product.price.toLocaleString()}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                         </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              이미지 클릭 시 선택한 제품 페이지로 이동합니다
+                            </p>
                       </div>
                       
-                      {/* 높이 비율 */}
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">높이 비율</label>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={rowLayout.show_text_overlay || false}
+                                onChange={(e) => {
+                                  const currentLayouts = design.row_layouts || {};
+                                  updateDesign('row_layouts', {
+                                    ...currentLayouts,
+                                    [rowIndex]: {
+                                      ...rowLayout,
+                                      show_text_overlay: e.target.checked
+                                    }
+                                  });
+                                }}
+                                className="w-3 h-3 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
+                              />
+                              <span className="ml-2 text-xs text-gray-700">텍스트 오버레이</span>
+                            </label>
+                          </div>
+                          
+                          {rowLayout.show_text_overlay && (
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">오버레이 위치</label>
                         <select
-                          value={rowLayout.height_ratio || 'square'}
+                                value={rowLayout.overlay_position || 'center'}
                           onChange={(e) => {
                             const currentLayouts = design.row_layouts || {};
                             updateDesign('row_layouts', {
                               ...currentLayouts,
                               [rowIndex]: {
                                 ...rowLayout,
-                                height_ratio: e.target.value as any
+                                      overlay_position: e.target.value as any
                               }
                             });
                           }}
                           className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
                         >
-                          <option value="square">정사각형</option>
-                          <option value="portrait">세로형</option>
-                          <option value="landscape">가로형</option>
-                          <option value="auto">자동</option>
+                                <option value="center">중앙</option>
+                                <option value="bottom">하단</option>
+                                <option value="top">상단</option>
                         </select>
                       </div>
-                      
-                      {/* 텍스트 정렬 */}
+                          )}
+                        </>
+                      )}
+
+                      {/* LIST 전용 설정 */}
+                      {rowLayout.layout_type === 'list' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">리스트 스타일</label>
+                            <select
+                              value={rowLayout.list_style || 'horizontal'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    list_style: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="horizontal">가로형</option>
+                              <option value="vertical">세로형</option>
+                              <option value="card">카드형</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={rowLayout.show_description || false}
+                                onChange={(e) => {
+                                  const currentLayouts = design.row_layouts || {};
+                                  updateDesign('row_layouts', {
+                                    ...currentLayouts,
+                                    [rowIndex]: {
+                                      ...rowLayout,
+                                      show_description: e.target.checked
+                                    }
+                                  });
+                                }}
+                                className="w-3 h-3 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
+                              />
+                              <span className="ml-2 text-xs text-gray-700">제품 설명 표시</span>
+                            </label>
+                          </div>
+                          
+                          <div>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={rowLayout.show_price_prominent || false}
+                                onChange={(e) => {
+                                  const currentLayouts = design.row_layouts || {};
+                                  updateDesign('row_layouts', {
+                                    ...currentLayouts,
+                                    [rowIndex]: {
+                                      ...rowLayout,
+                                      show_price_prominent: e.target.checked
+                                    }
+                                  });
+                                }}
+                                className="w-3 h-3 text-gray-900 border-gray-300 focus:ring-gray-900 focus:ring-1"
+                              />
+                              <span className="ml-2 text-xs text-gray-700">가격 강조 표시</span>
+                            </label>
+                          </div>
+                        </>
+                      )}
+
+                      {/* MASONRY 전용 설정 */}
+                      {rowLayout.layout_type === 'masonry' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">메이슨리 컬럼</label>
+                            <select
+                              value={rowLayout.masonry_columns || 3}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    masonry_columns: parseInt(e.target.value)
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value={2}>2개</option>
+                              <option value={3}>3개</option>
+                              <option value={4}>4개</option>
+                              <option value={5}>5개</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">최소 높이</label>
+                            <select
+                              value={rowLayout.min_height || 'medium'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    min_height: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="small">작게</option>
+                              <option value="medium">보통</option>
+                              <option value="large">크게</option>
+                            </select>
+                          </div>
+                        </>
+                      )}
+
+                      {/* BANNER 전용 설정 */}
+                      {rowLayout.layout_type === 'banner' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">배너 높이</label>
+                            <select
+                              value={rowLayout.banner_height || 'medium'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    banner_height: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="small">작게</option>
+                              <option value="medium">보통</option>
+                              <option value="large">크게</option>
+                              <option value="full">전체 화면</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">배너 스타일</label>
+                            <select
+                              value={rowLayout.banner_style || 'image'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    banner_style: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="image">이미지</option>
+                              <option value="gradient">그라데이션</option>
+                              <option value="solid">단색</option>
+                            </select>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">행동 유도 텍스트</label>
+                            <input
+                              type="text"
+                              value={rowLayout.call_to_action || ''}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    call_to_action: e.target.value
+                                  }
+                                });
+                              }}
+                              placeholder="예: 지금 구매하기"
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* TEXT 전용 설정 (컬럼 개념 제거) */}
+                      {rowLayout.layout_type === 'text' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">텍스트 내용</label>
+                            <textarea
+                              value={rowLayout.text_content || ''}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_content: e.target.value
+                                  }
+                                });
+                              }}
+                              placeholder="브랜드 스토리나 설명을 입력하세요..."
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none resize-none"
+                              rows={4}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">텍스트 스타일</label>
+                            <select
+                              value={rowLayout.text_style || 'paragraph'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_style: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="paragraph">문단</option>
+                              <option value="heading">제목</option>
+                              <option value="quote">인용문</option>
+                              <option value="highlight">강조</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">텍스트 크기</label>
+                            <select
+                              value={rowLayout.text_size || 'large'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_size: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="small">작게</option>
+                              <option value="medium">보통</option>
+                              <option value="large">크게</option>
+                              <option value="xl">매우 크게</option>
+                              <option value="xxl">초대형</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">최대 너비</label>
+                            <select
+                              value={rowLayout.max_width || 'medium'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    max_width: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="narrow">좁게</option>
+                              <option value="medium">보통</option>
+                              <option value="wide">넓게</option>
+                              <option value="full">전체</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">패딩</label>
+                            <select
+                              value={rowLayout.padding || 'large'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    padding: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="small">작게</option>
+                              <option value="medium">보통</option>
+                              <option value="large">크게</option>
+                              <option value="xl">매우 크게</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">텍스트 색상</label>
+                            <input
+                              type="color"
+                              value={rowLayout.text_color || '#000000'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_color: e.target.value
+                                  }
+                                });
+                              }}
+                              className="w-full h-8 border border-gray-200 rounded cursor-pointer"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">텍스트 굵기</label>
+                            <select
+                              value={rowLayout.text_weight || 'normal'}
+                              onChange={(e) => {
+                                const currentLayouts = design.row_layouts || {};
+                                updateDesign('row_layouts', {
+                                  ...currentLayouts,
+                                  [rowIndex]: {
+                                    ...rowLayout,
+                                    text_weight: e.target.value as any
+                                  }
+                                });
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            >
+                              <option value="normal">보통</option>
+                              <option value="medium">중간</option>
+                              <option value="semibold">굵게</option>
+                              <option value="bold">매우 굵게</option>
+                            </select>
+                          </div>
+
+                          {/* 공통 설정 */}
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">간격</label>
+                            <div className="grid grid-cols-2 gap-1">
+                              {['tight', 'normal', 'loose', 'extra-loose'].map((spacing) => (
+                                <button
+                                  key={spacing}
+                                  type="button"
+                                  onClick={() => {
+                                    const currentLayouts = design.row_layouts || {};
+                                    updateDesign('row_layouts', {
+                                      ...currentLayouts,
+                                      [rowIndex]: {
+                                        ...rowLayout,
+                                        spacing: spacing as any
+                                      }
+                                    });
+                                  }}
+                                  className={`p-1 border text-xs transition-all ${
+                                    rowLayout.spacing === spacing
+                                      ? 'border-gray-900 bg-gray-900 text-white'
+                                      : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                                  }`}
+                                >
+                                  {spacing === 'tight' ? '좁게' : spacing === 'normal' ? '보통' : spacing === 'loose' ? '넓게' : '더 넓게'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 텍스트 정렬 (텍스트 타입이 아닌 경우만) */}
+                          {rowLayout.layout_type !== 'text' && (
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">텍스트 정렬</label>
                         <div className="grid grid-cols-3 gap-1">
@@ -1107,6 +1868,9 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                           ))}
                         </div>
                       </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1266,7 +2030,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       <button
                         type="button"
                         onClick={removeBannerImage}
-                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600 transition-colors"
+                        className="absolute bottom-1 right-1 w-6 h-6 bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600 transition-colors"
                       >
                         ×
                       </button>
@@ -1527,7 +2291,12 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
               {/* 정렬 옵션 */}
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-500 uppercase tracking-wider">정렬</span>
-                <select className="border-none bg-transparent text-sm font-medium uppercase tracking-wider cursor-pointer" style={{ color: design.text_color }}>
+                <select 
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="border-none bg-transparent text-sm font-medium uppercase tracking-wider cursor-pointer" 
+                  style={{ color: design.text_color }}
+                >
                   <option value="newest">최신순</option>
                   <option value="price_asc">가격 낮은순</option>
                   <option value="price_desc">가격 높은순</option>
@@ -1560,12 +2329,13 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 {design.enable_custom_rows ? (
                   // 커스텀 행 레이아웃
                   (() => {
+                    const sortedProducts = sortProducts(products, sortBy);
                     const allProducts = [
                       // 제품 등록 카드를 첫 번째에 추가
                       { id: 'add-product', isAddCard: true },
-                      ...products,
+                      ...sortedProducts,
                       // 샘플 제품들 추가
-                      ...Array.from({ length: Math.max(0, 8 - products.length) }).map((_, i) => ({
+                      ...Array.from({ length: Math.max(0, 8 - sortedProducts.length) }).map((_, i) => ({
                         id: `sample-${i}`,
                         product_name: `Sample Product ${i + 1}`,
                         price: 99000 + (i * 10000),
@@ -1586,15 +2356,30 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                     // 각 행별로 제품 배치
                     Object.entries(rowLayouts).forEach(([rowIndexStr, rowLayout]) => {
                       const rowIndex = parseInt(rowIndexStr);
-                      const productsInRow = allProducts.slice(productIndex, productIndex + rowLayout.columns);
                       
-                      if (productsInRow.length > 0) {
+                      // 텍스트, 배너, 피처드 이미지 레이아웃은 제품을 소비하지 않음
+                      if (rowLayout.layout_type === 'text' || 
+                          rowLayout.layout_type === 'banner' || 
+                          (rowLayout.layout_type === 'featured' && rowLayout.featured_image_url)) {
                         rows.push({
                           index: rowIndex,
                           layout: rowLayout,
-                          products: productsInRow
+                          products: []
                         });
-                        productIndex += rowLayout.columns;
+                        return;
+                      }
+                      
+                      // 제품을 사용하는 레이아웃의 경우
+                      const productsNeeded = rowLayout.columns || 4;
+                      const rowProducts = allProducts.slice(productIndex, productIndex + productsNeeded);
+                      
+                      if (rowProducts.length > 0 || rowLayout.layout_type === 'featured') {
+                        rows.push({
+                          index: rowIndex,
+                          layout: rowLayout,
+                          products: rowProducts
+                        });
+                        productIndex += productsNeeded;
                       }
                     });
 
@@ -1630,13 +2415,43 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       let cardClass = '';
                       
                       switch (layout.layout_type) {
+                        case 'text':
+                          // 텍스트 레이아웃은 별도 처리
+                          const textSizeClass = layout.text_size === 'small' ? 'text-sm' :
+                                               layout.text_size === 'large' ? 'text-lg' :
+                                               layout.text_size === 'xl' ? 'text-xl' : 'text-base';
+                          const textWeightClass = layout.text_weight === 'medium' ? 'font-medium' :
+                                                layout.text_weight === 'semibold' ? 'font-semibold' :
+                                                layout.text_weight === 'bold' ? 'font-bold' : 'font-normal';
+                          const textAlignClass = layout.text_alignment === 'center' ? 'text-center' :
+                                               layout.text_alignment === 'right' ? 'text-right' : 'text-left';
+                          
+                          return (
+                            <div 
+                              key={row.index} 
+                              className={`py-8 ${textAlignClass}`}
+                              style={{ backgroundColor: layout.background_color }}
+                            >
+                              <div className="max-w-4xl mx-auto px-4">
+                                <div 
+                                  className={`${textSizeClass} ${textWeightClass} leading-relaxed whitespace-pre-wrap`}
+                                  style={{ color: layout.text_color || '#000000' }}
+                                >
+                                  {layout.text_content || '텍스트를 입력하세요...'}
+                                </div>
+                              </div>
+                            </div>
+                          );
                         case 'featured':
                           containerClass = `grid ${gridCols} ${gapClass}`;
-                          cardClass = layout.card_style === 'large' ? 'transform hover:scale-105' : '';
+                          cardClass = `relative ${layout.card_style === 'large' ? 'transform hover:scale-105' : ''}`;
                           break;
                         case 'banner':
-                          containerClass = `grid ${gridCols} ${gapClass}`;
-                          cardClass = 'relative overflow-hidden';
+                          const bannerHeightClass = layout.banner_height === 'small' ? 'h-32' :
+                                                  layout.banner_height === 'large' ? 'h-64' :
+                                                  layout.banner_height === 'full' ? 'h-screen' : 'h-48';
+                          containerClass = `${bannerHeightClass} relative overflow-hidden flex items-center justify-center`;
+                          cardClass = 'w-full h-full relative';
                           break;
                         case 'masonry':
                           containerClass = `columns-${layout.columns} ${gapClass}`;
@@ -1656,7 +2471,117 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                           className={`${containerClass} transition-all duration-300`}
                           style={{ backgroundColor: layout.background_color, ...gridStyle }}
                         >
-                          {rowProducts.map((product: any) => {
+                          {layout.layout_type === 'banner' ? (
+                            <div className="w-full h-full relative flex items-center justify-center"
+                                 style={{ 
+                                   backgroundColor: layout.background_color || '#f3f4f6',
+                                   backgroundImage: layout.banner_style === 'gradient' 
+                                     ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                                     : layout.banner_style === 'solid' 
+                                     ? 'none' 
+                                     : 'url("https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200&h=400&fit=crop")',
+                                   backgroundSize: 'cover',
+                                   backgroundPosition: 'center'
+                                 }}>
+                              <div className="text-center text-white z-10">
+                                <h3 className="text-2xl md:text-4xl font-bold mb-4">
+                                  특별 프로모션
+                                </h3>
+                                <p className="text-lg mb-6 opacity-90">
+                                  지금 구매하시면 특별 할인 혜택을 받으실 수 있습니다
+                                </p>
+                                {layout.call_to_action && (
+                                  <button className="px-8 py-3 bg-white text-gray-900 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                                    {layout.call_to_action}
+                                  </button>
+                                )}
+                              </div>
+                              <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+                            </div>
+                          ) : layout.layout_type === 'text' ? (
+                            <div className={`py-8 ${layout.text_alignment === 'center' ? 'text-center' : layout.text_alignment === 'right' ? 'text-right' : 'text-left'}`}>
+                              <div className="max-w-4xl mx-auto px-4">
+                                <div 
+                                  className={`${
+                                    layout.text_size === 'small' ? 'text-sm' :
+                                    layout.text_size === 'large' ? 'text-lg' :
+                                    layout.text_size === 'xl' ? 'text-xl' :
+                                    layout.text_size === 'xxl' ? 'text-2xl' : 'text-base'
+                                  } ${
+                                    layout.text_weight === 'medium' ? 'font-medium' :
+                                    layout.text_weight === 'semibold' ? 'font-semibold' :
+                                    layout.text_weight === 'bold' ? 'font-bold' : 'font-normal'
+                                  } leading-relaxed whitespace-pre-wrap`}
+                                  style={{ color: layout.text_color || '#000000' }}
+                                >
+                                  {layout.text_content || '텍스트를 입력하세요...'}
+                                </div>
+                              </div>
+                            </div>
+                          ) : layout.layout_type === 'featured' && layout.featured_image_url ? (
+                            // 피처드 이미지가 있는 경우
+                            <div 
+                              className="relative w-full cursor-pointer group overflow-hidden col-span-full"
+                              style={{ 
+                                height: layout.featured_size === 'hero' ? '80vh' : 
+                                       layout.featured_size === 'large' ? '400px' : '300px'
+                              }}
+                              onClick={() => {
+                                if (layout.linked_product_id) {
+                                  // 미리보기에서는 실제 이동하지 않고 알림만 표시
+                                  alert(`연결된 제품으로 이동: ${products.find(p => p.id === layout.linked_product_id)?.product_name || '제품'}`);
+                                }
+                              }}
+                            >
+                              <img
+                                src={layout.featured_image_url}
+                                alt="Featured content"
+                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                              />
+                              
+                              {/* 오버레이 */}
+                              <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-300"></div>
+                              
+                              {/* 텍스트 오버레이 */}
+                              {layout.show_text_overlay && (
+                                <div className={`absolute inset-0 flex ${
+                                  layout.overlay_position === 'top' ? 'items-start pt-8' :
+                                  layout.overlay_position === 'bottom' ? 'items-end pb-8' : 'items-center'
+                                } justify-center`}>
+                                  <div className="text-center text-white z-10">
+                                    <h3 className="text-xl md:text-3xl font-bold mb-2">
+                                      {layout.linked_product_id 
+                                        ? products.find(p => p.id === layout.linked_product_id)?.product_name || '특별 제품'
+                                        : '특별 제품'
+                                      }
+                                    </h3>
+                                    <p className="text-sm md:text-base opacity-90 mb-4">
+                                      {layout.linked_product_id 
+                                        ? `₩${products.find(p => p.id === layout.linked_product_id)?.price.toLocaleString() || '0'}`
+                                        : '프리미엄 컬렉션'
+                                      }
+                                    </p>
+                                    {layout.linked_product_id && (
+                                      <div className="inline-flex items-center px-4 py-2 bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 text-white text-sm font-medium hover:bg-opacity-30 transition-all duration-300">
+                                        자세히 보기
+                                        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* 클릭 힌트 */}
+                              {layout.linked_product_id && (
+                                <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                  클릭하여 제품 보기
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            rowProducts.map((product: any) => {
                             if (product.isAddCard) {
                               return (
                                 <div key="add-product" className={`group cursor-pointer ${cardClass}`}>
@@ -1720,9 +2645,25 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                                   customAspectRatio={aspectClass}
                                   textAlignment={layout.text_alignment}
                                 />
+                                  {layout.layout_type === 'featured' && layout.show_text_overlay && (
+                                    <div className={`absolute inset-0 bg-black bg-opacity-40 flex ${
+                                      layout.overlay_position === 'top' ? 'items-start pt-8' :
+                                      layout.overlay_position === 'bottom' ? 'items-end pb-8' : 'items-center'
+                                    } justify-center`}>
+                                      <div className="text-center text-white">
+                                        <h3 className="text-xl md:text-2xl font-bold mb-2">
+                                          {product.product_name}
+                                        </h3>
+                                        <p className="text-sm opacity-90">
+                                          특별 제품
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                               </div>
                             );
-                          })}
+                            })
+                          )}
                         </div>
                       );
                     });
@@ -1731,6 +2672,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                   // 기본 레이아웃
                   (() => {
                     const productsPerRow = design.products_per_row || 4;
+                    const sortedProducts = sortProducts(products, sortBy);
                     
                     // layout_style에 따른 처리
                     if (design.layout_style === 'list') {
@@ -1753,21 +2695,22 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                           </div>
                           
                           {/* 실제 제품 카드들 */}
-                          {products.map((product) => (
+                          {sortedProducts.map((product) => (
+                            <div key={product.id} className="break-inside-avoid mb-6">
                             <ProductCard
-                              key={product.id}
                               product={product as ProductCardData}
-                              variant="compact"
+                                variant={design.product_card_style as any}
                               showRating={true}
                               showActions={true}
                               isOwner={true}
                               onEdit={() => {}}
                               onDelete={() => {}}
                             />
+                            </div>
                           ))}
                           
                           {/* 샘플 제품 카드들 (실제 제품이 부족할 때) */}
-                          {Array.from({ length: Math.max(0, 6 - products.length) }).map((_, i) => {
+                          {Array.from({ length: Math.max(0, 6 - sortedProducts.length) }).map((_, i) => {
                             const sampleProduct: ProductCardData = {
                               id: `sample-${i}`,
                               product_name: `Sample Product ${i + 1}`,
@@ -1781,16 +2724,17 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                             };
 
                             return (
+                              <div key={`sample-${i}`} className="break-inside-avoid mb-6">
                               <ProductCard
-                                key={`sample-${i}`}
                                 product={sampleProduct}
-                                variant="compact"
+                                  variant={design.product_card_style as any}
                                 showRating={false}
                                 showActions={false}
                                 isOwner={false}
                                 onEdit={() => {}}
                                 onDelete={() => {}}
                               />
+                              </div>
                             );
                           })}
                         </div>
@@ -1859,6 +2803,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       );
                     } else {
                       // grid 레이아웃 (기본)
+                      const productsPerRow = design.products_per_row || 4;
                       const gridStyle = productsPerRow > 4 ? {
                         display: 'grid',
                         gridTemplateColumns: `repeat(${productsPerRow}, minmax(0, 1fr))`,
