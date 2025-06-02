@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import logger from '@/lib/logger';
 import ProductCard, { ProductCardData } from '@/components/ProductCard';
+import { reorderRowLayouts, DraggableBlockList, useDragAndDropState } from './editor/DraggableBlockList';
 
 type StoreDesign = {
   id?: string;
@@ -570,6 +571,168 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       text: '배경 이미지가 제거되었습니다.',
       type: 'success'
     });
+  };
+
+  // 드래그 앤 드롭 상태 관리
+  const {
+    dragState,
+    handleDragStart,
+    handleDragUpdate,
+    handleDragEnd
+  } = useDragAndDropState();
+
+  // row_layouts 재정렬 핸들러 추가
+  const handleRowLayoutReorder = useCallback((startIndex: number, endIndex: number) => {
+    if (!design.row_layouts) return;
+
+    // row_layouts 객체 재정렬
+    const reorderedLayouts = reorderRowLayouts(design.row_layouts, startIndex, endIndex);
+    
+    // 디자인 상태 업데이트
+    setDesign(prev => ({
+      ...prev,
+      row_layouts: reorderedLayouts
+    }));
+
+    // 변경사항 저장 (auto-save가 있다면)
+    // onSave?.(design);
+  }, [design.row_layouts, setDesign]);
+
+  // row_layouts를 StoreBlock 배열로 변환하는 헬퍼 함수
+  const convertRowLayoutsToBlocks = useCallback((): StoreBlock[] => {
+    if (!design.row_layouts) return [];
+
+    return Object.entries(design.row_layouts)
+      .sort(([aKey], [bKey]) => parseInt(aKey) - parseInt(bKey))
+      .map(([key, layout], index) => ({
+        id: `row-${key}`,
+        type: layout.layout_type as StoreBlock['type'],
+        position: index,
+        data: layout,
+        created_at: new Date().toISOString(),
+        spacing: 'normal'
+      }));
+  }, [design.row_layouts]);
+
+  // StoreBlock 배열을 row_layouts 객체로 변환하는 헬퍼 함수
+  const convertBlocksToRowLayouts = useCallback((blocks: StoreBlock[]): Record<string, any> => {
+    const rowLayouts: Record<string, any> = {};
+    
+    blocks.forEach((block, index) => {
+      rowLayouts[index.toString()] = {
+        ...block.data,
+        layout_type: block.type
+      };
+    });
+
+    return rowLayouts;
+  }, []);
+
+  // 드래그 앤 드롭을 통한 블록 업데이트
+  const handleBlocksUpdate = useCallback((blocks: StoreBlock[]) => {
+    const newRowLayouts = convertBlocksToRowLayouts(blocks);
+    
+    setDesign(prev => ({
+      ...prev,
+      row_layouts: newRowLayouts
+    }));
+  }, [convertBlocksToRowLayouts, setDesign]);
+
+  // 렌더링 부분에서 기존 row_layouts 편집 UI를 드래그 앤 드롭 에디터로 교체
+  const renderRowLayoutsEditor = () => {
+    const blocks = convertRowLayoutsToBlocks();
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">
+            레이아웃 편집
+          </h3>
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <span>{blocks.length}개 블록</span>
+            {dragState.isDragging && (
+              <span className="text-blue-600 animate-pulse">재정렬 중...</span>
+            )}
+          </div>
+        </div>
+
+        {/* 드래그 앤 드롭 안내 */}
+        {blocks.length > 1 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
+              </svg>
+              <div>
+                <h4 className="text-sm font-medium text-blue-900">드래그 앤 드롭으로 순서 변경</h4>
+                <p className="text-sm text-blue-700 mt-1">
+                  각 블록의 드래그 핸들(⋮⋮)을 잡고 드래그하여 레이아웃 순서를 변경할 수 있습니다.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 드래그 가능한 블록 리스트 */}
+        <DraggableBlockList
+          blocks={blocks}
+          onReorder={handleRowLayoutReorder}
+          onDragStart={handleDragStart}
+          onDragUpdate={handleDragUpdate}
+          onDragEnd={handleDragEnd}
+          renderBlock={(block, index, isDragging) => (
+            <RowLayoutBlockRenderer
+              block={block}
+              index={index}
+              isDragging={isDragging}
+              onUpdate={(updates) => {
+                // 개별 블록 업데이트
+                const updatedBlocks = blocks.map(b => 
+                  b.id === block.id ? { ...b, ...updates } : b
+                );
+                handleBlocksUpdate(updatedBlocks);
+              }}
+              onDelete={() => {
+                // 블록 삭제
+                const updatedBlocks = blocks.filter(b => b.id !== block.id);
+                handleBlocksUpdate(updatedBlocks);
+              }}
+            />
+          )}
+          className="border border-gray-200 rounded-lg p-4"
+        />
+
+        {/* 새 블록 추가 버튼 */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              // 새 레이아웃 블록 추가 로직
+              const newBlock: StoreBlock = {
+                id: `row-${Date.now()}`,
+                type: 'text',
+                position: blocks.length,
+                data: {
+                  layout_type: 'text',
+                  text_content: '새로운 텍스트 블록',
+                  text_size: 'medium',
+                  text_alignment: 'left'
+                },
+                created_at: new Date().toISOString(),
+                spacing: 'normal'
+              };
+              
+              handleBlocksUpdate([...blocks, newBlock]);
+            }}
+            className="flex items-center space-x-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span className="text-sm text-gray-600">새 블록 추가</span>
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (message && (message.text === '존재하지 않는 상점입니다.' || 

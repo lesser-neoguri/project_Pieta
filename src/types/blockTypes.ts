@@ -1,8 +1,17 @@
-// 기본 블록 인터페이스
+// 통합된 블록 타입 시스템
 export interface BaseBlock {
   id: string;
   position: number;
   isEditing?: boolean;
+  
+  // 공통 설정
+  spacing?: 'tight' | 'normal' | 'loose' | 'extra-loose';
+  background_color?: string;
+  text_alignment?: 'left' | 'center' | 'right';
+  
+  // 메타데이터
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ===========================================
@@ -10,16 +19,18 @@ export interface BaseBlock {
 // ===========================================
 
 export interface TextBlockData {
-  text_content: string;                    // 텍스트 내용
-  text_size: 'small' | 'medium' | 'large' | 'xl' | 'xxl';  // 텍스트 크기
-  text_alignment: 'left' | 'center' | 'right' | 'justify'; // 정렬
-  text_color?: string;                     // 텍스트 색상
-  background_color?: string;               // 배경 색상
-  max_width: 'small' | 'medium' | 'large' | 'full';       // 최대 너비
-  padding: 'none' | 'small' | 'medium' | 'large';         // 패딩
-  font_weight: 'normal' | 'medium' | 'semibold' | 'bold'; // 글자 굵기
-  line_height: 'tight' | 'normal' | 'relaxed' | 'loose';  // 줄 간격
-  enable_markdown?: boolean;               // 마크다운 지원 여부
+  text_content: string;
+  text_size: 'small' | 'medium' | 'large' | 'xl' | 'xxl';
+  text_alignment: 'left' | 'center' | 'right' | 'justify';
+  text_color: string;                          // required로 변경
+  background_color?: string;
+  max_width: 'small' | 'medium' | 'large' | 'full';
+  padding: 'none' | 'small' | 'medium' | 'large';
+  font_weight: 'normal' | 'medium' | 'semibold' | 'bold';
+  line_height: 'tight' | 'normal' | 'relaxed' | 'loose';
+  text_weight: 'normal' | 'medium' | 'semibold' | 'bold'; // 추가
+  text_style: 'paragraph' | 'heading' | 'quote' | 'highlight'; // 추가
+  enable_markdown?: boolean;
 }
 
 export interface TextBlock extends BaseBlock {
@@ -34,10 +45,13 @@ export const DEFAULT_TEXT_BLOCK: Omit<TextBlock, 'id' | 'position'> = {
     text_content: '',
     text_size: 'medium',
     text_alignment: 'center',
+    text_color: '#333333',
     max_width: 'large',
     padding: 'medium',
     font_weight: 'normal',
     line_height: 'normal',
+    text_weight: 'normal',
+    text_style: 'paragraph',
     enable_markdown: false
   }
 };
@@ -47,21 +61,21 @@ export const DEFAULT_TEXT_BLOCK: Omit<TextBlock, 'id' | 'position'> = {
 // ===========================================
 
 export interface ProductGridBlockData {
-  columns: number;                         // 컬럼 수 (1-8)
-  spacing: 'none' | 'tight' | 'normal' | 'loose' | 'extra-loose'; // 간격
-  card_style: 'default' | 'compact' | 'detailed' | 'minimal';     // 카드 스타일
-  height_ratio: 'square' | 'portrait' | 'landscape' | 'auto';     // 높이 비율
-  show_price: boolean;                     // 가격 표시 여부
-  show_description: boolean;               // 설명 표시 여부
-  show_rating: boolean;                    // 평점 표시 여부
-  max_products?: number;                   // 최대 제품 수
-  product_filter?: {                       // 제품 필터
+  columns: number;
+  spacing: 'none' | 'tight' | 'normal' | 'loose' | 'extra-loose';
+  card_style: 'default' | 'compact' | 'detailed' | 'minimal';
+  height_ratio: 'square' | 'portrait' | 'landscape' | 'auto';
+  show_price: boolean;
+  show_description: boolean;
+  show_rating: boolean;
+  max_products?: number;
+  product_filter?: {
     category?: string;
     min_price?: number;
     max_price?: number;
     in_stock_only?: boolean;
   };
-  sort_by: 'newest' | 'price_asc' | 'price_desc' | 'rating' | 'sales'; // 정렬
+  sort_by: 'newest' | 'price_asc' | 'price_desc' | 'rating' | 'sales';
 }
 
 export interface ProductGridBlock extends BaseBlock {
@@ -69,7 +83,6 @@ export interface ProductGridBlock extends BaseBlock {
   data: ProductGridBlockData;
 }
 
-// 기본값
 export const DEFAULT_GRID_BLOCK: Omit<ProductGridBlock, 'id' | 'position'> = {
   type: 'grid',
   data: {
@@ -89,17 +102,19 @@ export const DEFAULT_GRID_BLOCK: Omit<ProductGridBlock, 'id' | 'position'> = {
 // ===========================================
 
 export interface FeaturedProductBlockData {
-  featured_size: 'medium' | 'large' | 'hero';             // 크기
-  featured_product_id?: string;           // 특정 제품 ID (선택적)
-  layout_style: 'overlay' | 'side-by-side' | 'bottom';    // 레이아웃 스타일
-  show_text_overlay: boolean;             // 텍스트 오버레이 표시
-  overlay_position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'; // 오버레이 위치
-  overlay_background?: string;            // 오버레이 배경색
-  custom_title?: string;                  // 커스텀 제목
-  custom_description?: string;            // 커스텀 설명
-  call_to_action?: string;                // 행동 유도 텍스트
-  background_image_url?: string;          // 배경 이미지
-  enable_parallax?: boolean;              // 패럴랙스 효과
+  featured_size: 'medium' | 'large' | 'hero';
+  featured_product_id?: string;
+  layout_style: 'overlay' | 'side-by-side' | 'bottom';
+  show_text_overlay: boolean;
+  overlay_position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center';
+  overlay_background?: string;
+  custom_title?: string;
+  custom_description?: string;
+  call_to_action?: string;
+  background_image_url?: string;
+  enable_parallax?: boolean;
+  featured_image_url?: string;
+  linked_product_id?: string;
 }
 
 export interface FeaturedProductBlock extends BaseBlock {
@@ -107,7 +122,6 @@ export interface FeaturedProductBlock extends BaseBlock {
   data: FeaturedProductBlockData;
 }
 
-// 기본값
 export const DEFAULT_FEATURED_BLOCK: Omit<FeaturedProductBlock, 'id' | 'position'> = {
   type: 'featured',
   data: {
@@ -125,19 +139,20 @@ export const DEFAULT_FEATURED_BLOCK: Omit<FeaturedProductBlock, 'id' | 'position
 // ===========================================
 
 export interface BannerBlockData {
-  banner_height: 'small' | 'medium' | 'large' | 'hero';   // 높이
-  banner_style: 'solid' | 'gradient' | 'image';           // 스타일
-  background_color?: string;              // 배경색
-  gradient_colors?: [string, string];     // 그라데이션 색상 [시작, 끝]
-  gradient_direction?: 'horizontal' | 'vertical' | 'diagonal'; // 그라데이션 방향
-  background_image_url?: string;          // 배경 이미지
-  title?: string;                         // 제목
-  description?: string;                   // 설명
-  call_to_action?: string;                // 행동 유도 버튼 텍스트
-  cta_link?: string;                      // 버튼 링크
-  text_color?: string;                    // 텍스트 색상
-  text_alignment: 'left' | 'center' | 'right'; // 텍스트 정렬
-  enable_animation?: boolean;             // 애니메이션 효과
+  banner_height: 'small' | 'medium' | 'large' | 'hero';
+  banner_style: 'solid' | 'gradient' | 'image';
+  background_color?: string;
+  gradient_colors?: [string, string];
+  gradient_direction?: 'horizontal' | 'vertical' | 'diagonal';
+  background_image_url?: string;
+  title?: string;
+  description?: string;
+  call_to_action?: string;
+  cta_link?: string;
+  text_color?: string;
+  text_alignment: 'left' | 'center' | 'right';
+  enable_animation?: boolean;
+  banner_image_url?: string;
 }
 
 export interface BannerBlock extends BaseBlock {
@@ -145,7 +160,6 @@ export interface BannerBlock extends BaseBlock {
   data: BannerBlockData;
 }
 
-// 기본값
 export const DEFAULT_BANNER_BLOCK: Omit<BannerBlock, 'id' | 'position'> = {
   type: 'banner',
   data: {
@@ -166,14 +180,15 @@ export const DEFAULT_BANNER_BLOCK: Omit<BannerBlock, 'id' | 'position'> = {
 // ===========================================
 
 export interface MasonryBlockData {
-  columns: number;                        // 컬럼 수 (2-6)
-  spacing: 'tight' | 'normal' | 'loose'; // 간격
-  min_height: 'small' | 'medium' | 'large'; // 최소 높이
-  max_height?: 'medium' | 'large' | 'xl'; // 최대 높이
-  maintain_aspect_ratio: boolean;         // 비율 유지 여부
-  enable_lightbox: boolean;               // 라이트박스 기능
-  show_product_info: boolean;             // 제품 정보 표시
-  hover_effect: 'none' | 'zoom' | 'overlay' | 'lift'; // 호버 효과
+  columns: number;
+  masonry_columns: number; // 추가
+  spacing: 'tight' | 'normal' | 'loose';
+  min_height: 'small' | 'medium' | 'large';
+  max_height?: 'medium' | 'large' | 'xl';
+  maintain_aspect_ratio: boolean;
+  enable_lightbox: boolean;
+  show_product_info: boolean;
+  hover_effect: 'none' | 'zoom' | 'overlay' | 'lift';
 }
 
 export interface MasonryBlock extends BaseBlock {
@@ -181,11 +196,11 @@ export interface MasonryBlock extends BaseBlock {
   data: MasonryBlockData;
 }
 
-// 기본값
 export const DEFAULT_MASONRY_BLOCK: Omit<MasonryBlock, 'id' | 'position'> = {
   type: 'masonry',
   data: {
     columns: 3,
+    masonry_columns: 3,
     spacing: 'normal',
     min_height: 'medium',
     maintain_aspect_ratio: false,
@@ -200,16 +215,17 @@ export const DEFAULT_MASONRY_BLOCK: Omit<MasonryBlock, 'id' | 'position'> = {
 // ===========================================
 
 export interface ListBlockData {
-  list_style: 'horizontal' | 'vertical';  // 리스트 방향
-  item_layout: 'compact' | 'comfortable' | 'spacious'; // 아이템 레이아웃
-  show_images: boolean;                   // 이미지 표시 여부
-  image_position: 'left' | 'right' | 'top'; // 이미지 위치
-  image_size: 'small' | 'medium' | 'large'; // 이미지 크기
-  show_description: boolean;              // 설명 표시 여부
-  show_price: boolean;                    // 가격 표시 여부
-  show_rating: boolean;                   // 평점 표시 여부
-  enable_dividers: boolean;               // 구분선 표시
-  max_items?: number;                     // 최대 아이템 수
+  list_style: 'horizontal' | 'vertical';
+  item_layout: 'compact' | 'comfortable' | 'spacious';
+  show_images: boolean;
+  image_position: 'left' | 'right' | 'top';
+  image_size: 'small' | 'medium' | 'large';
+  show_description: boolean;
+  show_price: boolean;
+  show_rating: boolean;
+  enable_dividers: boolean;
+  max_items?: number;
+  show_price_prominent: boolean; // 추가
 }
 
 export interface ListBlock extends BaseBlock {
@@ -217,7 +233,6 @@ export interface ListBlock extends BaseBlock {
   data: ListBlockData;
 }
 
-// 기본값
 export const DEFAULT_LIST_BLOCK: Omit<ListBlock, 'id' | 'position'> = {
   type: 'list',
   data: {
@@ -229,7 +244,8 @@ export const DEFAULT_LIST_BLOCK: Omit<ListBlock, 'id' | 'position'> = {
     show_description: true,
     show_price: true,
     show_rating: false,
-    enable_dividers: true
+    enable_dividers: true,
+    show_price_prominent: false
   }
 };
 
@@ -310,4 +326,24 @@ export const BLOCK_TYPE_METADATA: Record<BlockType, BlockTypeMetadata> = {
     category: 'product',
     preview: '세로 목록'
   }
-}; 
+};
+
+// 편집 상태 관리
+export interface EditorState {
+  selectedBlockId: string | null;
+  editingBlockId: string | null;
+  dragState: {
+    isDragging: boolean;
+    draggedBlockId: string | null;
+    dropZone: number | null;
+  };
+  clipboard: StoreBlock | null;
+}
+
+// 블록 액션
+export interface BlockAction {
+  type: 'add' | 'update' | 'delete' | 'reorder' | 'duplicate';
+  blockId: string;
+  data?: any;
+  position?: number;
+} 
