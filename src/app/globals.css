@@ -2,6 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/* @hello-pangea/dnd 애니메이션 완전 비활성화 - 강화된 버전 */
+[data-rbd-draggable-context-id] {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
+[data-rbd-drag-handle-context-id] {
+  transition: none !important;
+  animation: none !important;
+}
+
+[data-rbd-droppable-context-id] {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* react-beautiful-dnd의 모든 요소 애니메이션 비활성화 */
+[data-rbd-draggable-id] {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
+[data-rbd-droppable-id] {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 드래그 중이 아닐 때도 애니메이션 비활성화 */
+.rbd-draggable {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
+.rbd-droppable {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 라이브러리 내부 클래스들도 강제 비활성화 */
+[data-rbd-draggable-id] * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 드래그 중 transform 애니메이션 비활성화 */
+[data-rbd-draggable-id][style*="transform"] {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 드롭 완료 후 최종 위치로의 애니메이션 비활성화 */
+[data-rbd-draggable-id]:not([data-rbd-drag-handle-dragging-id]) {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 모든 transform 관련 애니메이션 강제 비활성화 */
+*[class*="draggable"], 
+*[id*="draggable"],
+*[data-rbd-draggable-id] {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -177,4 +245,28 @@ body::-webkit-scrollbar-thumb:hover {
 
 .custom-scrollbar-vertical::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.35));
+}
+
+/* 드래그 드롭 애니메이션 완전 비활성화 컨테이너 */
+.drag-drop-no-animation * {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
+.drag-drop-no-animation [data-rbd-draggable-id] {
+  transition: none !important;
+  animation: none !important;
+  transform-origin: center !important;
+}
+
+.drag-drop-no-animation [data-rbd-droppable-id] {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 특별히 transform 관련 애니메이션 비활성화 */
+.drag-drop-no-animation *[style*="transform"] {
+  transition: none !important;
+  animation: none !important;
 }
