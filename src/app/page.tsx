@@ -1,39 +1,62 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+
+interface Store {
+  id: string;
+  store_name: string;
+  store_description: string;
+  store_banner_url: string | null;
+  store_logo_url: string | null;
+  username: string | null;
+}
 
 export default function HomePage() {
   const [mounted, setMounted] = useState(false);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     setMounted(true);
+    fetchStores();
   }, []);
+
+  const fetchStores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id, store_name, store_description, store_banner_url, store_logo_url, username')
+        .eq('is_open', true)
+        .limit(6);
+
+      if (error) {
+        console.error('Error fetching stores:', error);
+      } else {
+        setStores(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section - 여백 없이 전체 너비 사용 */}
       <div className="h-screen w-full relative overflow-hidden">
-        {/* Background Video */}
-        <div className="absolute inset-0 z-0 w-full h-full">
-          {/* 비디오 또는 이미지 배경 */}
-          <div className="relative w-full h-full">
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute w-full h-full object-cover"
-            >
-              <source src="/videos/mainVD.mp4" type="video/mp4" />
-            </video>
-            {/* 비디오가 로드되지 않을 때 표시할 대체 배경 */}
-            <div className="absolute inset-0 bg-gray-900 z-[-1]"></div>
-          </div>
-          {/* 비디오/이미지 위에 그라데이션 오버레이 추가 */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/30" />
+        {/* Background Gradient */}
+        <div className="absolute inset-0 z-0 w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+          {/* Pattern overlay for texture */}
+          <div className="absolute inset-0 opacity-10" style={{
+            backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+            backgroundSize: '20px 20px'
+          }}></div>
         </div>
 
         {/* Content */}
@@ -98,8 +121,95 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Collection Banner Section - 여백 없이 전체 너비 사용 */}
-      <div className="w-full bg-gray-200 relative">
+      {/* Stores Section */}
+      <div className="w-full bg-white py-20">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-16">
+            <p className="text-sm uppercase tracking-widest mb-2 text-gray-600">Featured Stores</p>
+            <h2 className="text-4xl font-light uppercase tracking-[0.2em] mb-6">파트너 스토어</h2>
+            <p className="text-sm text-gray-600 mb-8">다양한 분야의 전문 매장들을 만나보세요</p>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+            </div>
+          ) : stores.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {stores.map((store) => (
+                <Link 
+                  key={store.id} 
+                  href={`/store/${store.id}`}
+                  className="group block bg-white border border-gray-200 hover:shadow-xl transition-all duration-300"
+                >
+                  <div className="aspect-[4/3] relative overflow-hidden">
+                    {store.store_banner_url ? (
+                      <Image
+                        src={store.store_banner_url}
+                        alt={store.store_name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-gray-300 rounded-full flex items-center justify-center">
+                            <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-2m-2 0H7m10 0v-2a2 2 0 00-2-2H9a2 2 0 00-2 2v2m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10.99" />
+                            </svg>
+                          </div>
+                          <p className="text-sm text-gray-500">이미지 없음</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2 group-hover:text-black transition-colors">
+                      {store.store_name}
+                    </h3>
+                    {store.store_description && (
+                      <p className="text-sm text-gray-600 mb-3 overflow-hidden" style={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical'
+                      }}>
+                        {store.store_description}
+                      </p>
+                    )}
+                    {store.username && (
+                      <p className="text-xs text-gray-400 uppercase tracking-wide">
+                        @{store.username}
+                      </p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-20">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-2m-2 0H7m10 0v-2a2 2 0 00-2-2H9a2 2 0 00-2 2v2m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v10.99" />
+                </svg>
+              </div>
+              <p className="text-gray-500">등록된 스토어가 없습니다</p>
+            </div>
+          )}
+
+          <div className="text-center mt-12">
+            <Link 
+              href="/stores" 
+              className="inline-block px-10 py-3 border border-black text-black text-sm tracking-widest uppercase hover:bg-black hover:text-white transition-colors duration-300"
+            >
+              모든 스토어 보기
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Collection Banner Section */}
+      <div className="w-full bg-gray-100 relative">
         <div className="py-24 text-center relative z-10">
           <p className="text-sm uppercase tracking-widest mb-2">프리미엄 컬렉션</p>
           <h2 className="text-4xl font-light uppercase tracking-[0.2em] mb-6">COLLECTION</h2>
@@ -111,8 +221,6 @@ export default function HomePage() {
             더 알아보기
           </Link>
         </div>
-        {/* 배경 색상 설정 */}
-        <div className="absolute inset-0 z-0 bg-gray-100"></div>
       </div>
 
       {/* Features Section */}

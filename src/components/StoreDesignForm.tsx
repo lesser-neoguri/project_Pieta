@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import logger from '@/lib/logger';
-import { BasicInlinePreviewArea, BlockWidth, DEFAULT_BLOCK_WIDTH } from './editor/BasicInlinePreviewArea';
+import { BasicInlinePreviewArea, BlockWidth, DEFAULT_BLOCK_WIDTH, ContainerMaxWidth, ContainerPadding } from './editor/BasicInlinePreviewArea';
 import { v4 as uuidv4 } from 'uuid';
 
 // 기본 타입 정의
@@ -33,6 +33,7 @@ type StoreBlock = {
   min_height?: number; // 최소 높이
   max_height?: number; // 최대 높이
   show_store_header?: boolean; // 상점 헤더 표시 여부 (배너 블록용)
+  banner_image_url?: string; // 배너 블록 이미지 URL
 };
 
 type StoreDesign = {
@@ -50,6 +51,7 @@ type StoreDesign = {
   show_contact_info: boolean;
   show_business_hours: boolean;
   banner_height: 'small' | 'medium' | 'large' | 'full';
+
   logo_position: 'left' | 'center' | 'right';
   title_font_size: 'small' | 'medium' | 'large' | 'xl';
   description_font_size: 'small' | 'medium' | 'large';
@@ -62,6 +64,9 @@ type StoreDesign = {
   // 네비게이션 바와 콘텐츠 사이의 마진 설정
   navbar_margin_mode?: 'none' | 'navbar-height' | 'custom';
   custom_navbar_margin?: number; // 커스텀 마진 (픽셀 단위)
+  // 글로벌 컨테이너 설정
+  container_max_width?: number; // 퍼센트 단위 (30 ~ 100)
+  container_padding?: number; // 퍼센트 단위 (0 ~ 20)
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -77,6 +82,7 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
   show_contact_info: true,
   show_business_hours: true,
   banner_height: 'medium',
+
   logo_position: 'center',
   title_font_size: 'large',
   description_font_size: 'medium',
@@ -87,7 +93,10 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
   navbar_logo_color: '#FFFFFF',
   // 네비게이션 바 마진 기본값
   navbar_margin_mode: 'navbar-height', // 기본적으로 nav 바 높이만큼 마진
-  custom_navbar_margin: 64 // 기본 64px
+  custom_navbar_margin: 64, // 기본 64px
+  // 글로벌 컨테이너 기본값
+  container_max_width: 85, // 기본적으로 85%
+  container_padding: 4 // 기본적으로 4%
 };
 
 export default function StoreDesignForm({ storeId }: { storeId: string }) {
@@ -101,6 +110,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<StoreBlock | null>(null);
   const [activeTab, setActiveTab] = useState<'design' | 'block'>('design');
+  const [imageUploading, setImageUploading] = useState(false);
 
 
 
@@ -161,6 +171,39 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     fetchStoreData();
   }, [user, storeId]);
 
+  // 사이드바 상태에 따라 네비게이션 바 마진 조정
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const navbar = document.querySelector('nav') as HTMLElement;
+      if (navbar) {
+        if (sidebarOpen) {
+          navbar.style.marginLeft = '320px'; // 80 * 4 = 320px (w-80)
+          navbar.style.transition = 'margin-left 0.3s ease, max-width 0.3s ease';
+          navbar.style.maxWidth = 'calc(100vw - 320px)';
+          navbar.style.width = 'calc(100vw - 320px)';
+        } else {
+          navbar.style.marginLeft = '0px';
+          navbar.style.transition = 'margin-left 0.3s ease, max-width 0.3s ease';
+          navbar.style.maxWidth = '100vw';
+          navbar.style.width = '100vw';
+        }
+      }
+    }
+
+    // 컴포넌트 언마운트 시 스타일 초기화
+    return () => {
+      if (typeof document !== 'undefined') {
+        const navbar = document.querySelector('nav') as HTMLElement;
+        if (navbar) {
+          navbar.style.marginLeft = '';
+          navbar.style.transition = '';
+          navbar.style.maxWidth = '';
+          navbar.style.width = '';
+        }
+      }
+    };
+  }, [sidebarOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -168,20 +211,64 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     setLoading(true);
     setMessage(null);
 
-    try {
-      const designData = {
-        ...design,
-        store_id: storeId,
-        enable_custom_rows: design.row_layouts && Object.keys(design.row_layouts).length > 0 ? true : design.enable_custom_rows
-      };
+    const designData = {
+      // 기본 정보
+      id: design.id,
+      store_id: storeId,
+      
+      // 색상 설정
+      theme_color: design.theme_color || '#000000',
+      accent_color: design.accent_color || '#666666',
+      background_color: design.background_color || '#ffffff',
+      text_color: design.text_color || '#000000',
+      
+      // 폰트 및 레이아웃
+      font_family: design.font_family || 'Inter',
+      layout_style: design.layout_style || 'grid',
+      header_style: design.header_style || 'modern',
+      product_card_style: design.product_card_style || 'default',
+      
+      // 표시 옵션
+      show_store_description: design.show_store_description ?? true,
+      show_contact_info: design.show_contact_info ?? true,
+      show_business_hours: design.show_business_hours ?? true,
+      
+      // 배너 및 로고 설정
+      banner_height: design.banner_height || 'medium',
 
+      logo_position: design.logo_position || 'center',
+      title_font_size: design.title_font_size || 'large',
+      description_font_size: design.description_font_size || 'medium',
+      
+      // 네비게이션 바 설정
+      navbar_background_color: design.navbar_background_color || 'rgba(255, 255, 255, 0)',
+      navbar_icon_color: design.navbar_icon_color || '#FFFFFF',
+      navbar_logo_color: design.navbar_logo_color || '#FFFFFF',
+      navbar_margin_mode: design.navbar_margin_mode || 'navbar-height',
+      custom_navbar_margin: typeof design.custom_navbar_margin === 'number' ? design.custom_navbar_margin : 64,
+      
+      // 컨테이너 설정
+      container_max_width: typeof design.container_max_width === 'number' ? design.container_max_width : 85,
+      container_padding: typeof design.container_padding === 'number' ? design.container_padding : 4,
+      
+      // 커스텀 행 설정
+      enable_custom_rows: design.row_layouts && Object.keys(design.row_layouts).length > 0 ? true : design.enable_custom_rows,
+      row_layouts: design.row_layouts || null
+    };
+
+    try {
+      console.log('Saving design data:', designData);
+      
       const { data, error } = await supabase
         .from('store_designs')
         .upsert(designData)
         .select()
         .single();
       
+      console.log('Supabase response:', { data, error });
+      
       if (error) {
+        console.error('Supabase error details:', error);
         throw error;
       }
 
@@ -198,15 +285,23 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       }, 1500);
       
     } catch (error: any) {
-      console.error('Error saving design:', error);
+      console.error('Error saving design:');
+      console.error('Error object:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error code:', error?.code);
+      console.error('Error details:', error?.details);
+      console.error('Design data being saved:', JSON.stringify(designData, null, 2));
+      
       setMessage({
-        text: error.message || '저장 중 오류가 발생했습니다.', 
+        text: error?.message || '저장 중 오류가 발생했습니다.', 
         type: 'error'
       });
       
       logger.error('Failed to update store design', {
         storeId,
-        error: error.message
+        error: error?.message,
+        errorCode: error?.code,
+        errorDetails: error?.details
       });
     } finally {
       setLoading(false);
@@ -218,7 +313,29 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
   };
 
   const updateDesign = (field: keyof StoreDesign, value: any) => {
-    const newDesign = { ...design, [field]: value };
+    // 숫자 값 안전 처리
+    let safeValue = value;
+    if (field === 'container_max_width' || field === 'container_padding' || field === 'custom_navbar_margin') {
+      const numValue = typeof value === 'string' ? parseFloat(value) : value;
+      
+      // NaN이나 빈 문자열 체크 - 기본값으로 대체하지 않고 현재값 유지
+      if (isNaN(numValue)) {
+        return; // 잘못된 값은 무시
+      }
+      
+      // 범위 체크 및 보정
+      if (field === 'container_max_width') {
+        safeValue = Math.max(30, Math.min(100, numValue));
+        safeValue = Math.round(safeValue * 10) / 10; // 소수점 한 자리로 제한
+      } else if (field === 'container_padding') {
+        safeValue = Math.max(0, Math.min(20, numValue));
+        safeValue = Math.round(safeValue * 10) / 10; // 소수점 한 자리로 제한
+      } else if (field === 'custom_navbar_margin') {
+        safeValue = Math.max(0, Math.min(500, Math.round(numValue))); // 정수로 제한
+      }
+    }
+
+    const newDesign = { ...design, [field]: safeValue };
     setDesign(newDesign);
     
     // 헤더 네비게이션 및 마진 관련 변경사항을 즉시 Navbar에 반영
@@ -226,13 +343,98 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       // 커스텀 이벤트를 통해 Navbar에 변경사항 전달
       window.dispatchEvent(new CustomEvent('storeDesignChange', {
         detail: {
-          navbar_background_color: field === 'navbar_background_color' ? value : design.navbar_background_color,
-          navbar_logo_color: field === 'navbar_logo_color' ? value : design.navbar_logo_color,
-          navbar_icon_color: field === 'navbar_icon_color' ? value : design.navbar_icon_color,
-          navbar_margin_mode: field === 'navbar_margin_mode' ? value : design.navbar_margin_mode,
-          custom_navbar_margin: field === 'custom_navbar_margin' ? value : design.custom_navbar_margin
+          navbar_background_color: field === 'navbar_background_color' ? safeValue : design.navbar_background_color,
+          navbar_logo_color: field === 'navbar_logo_color' ? safeValue : design.navbar_logo_color,
+          navbar_icon_color: field === 'navbar_icon_color' ? safeValue : design.navbar_icon_color,
+          navbar_margin_mode: field === 'navbar_margin_mode' ? safeValue : design.navbar_margin_mode,
+          custom_navbar_margin: field === 'custom_navbar_margin' ? safeValue : design.custom_navbar_margin
         }
       }));
+    }
+  };
+
+
+
+  // 배너 블록 이미지 업로드 함수
+  const handleBlockImageUpload = async (file: File) => {
+    if (!file || !user || !selectedBlock) return;
+
+    // 파일 유효성 검사
+    if (!file.type.startsWith('image/')) {
+      setMessage({ text: '이미지 파일만 업로드 가능합니다.', type: 'error' });
+      return;
+    }
+
+    // 파일 크기 제한 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ text: '파일 크기는 5MB 이하여야 합니다.', type: 'error' });
+      return;
+    }
+
+    setImageUploading(true);
+    setMessage(null);
+
+    try {
+      // 고유한 파일명 생성
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${storeId}/block_${selectedBlock.id}_${Date.now()}.${fileExt}`;
+
+      // Supabase Storage에 업로드
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('store-images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // 공개 URL 생성
+      const { data: urlData } = supabase.storage
+        .from('store-images')
+        .getPublicUrl(fileName);
+
+      if (urlData?.publicUrl) {
+        updateSelectedBlockData('banner_image_url', urlData.publicUrl);
+        setMessage({ text: '이미지가 성공적으로 업로드되었습니다!', type: 'success' });
+      }
+
+    } catch (error: any) {
+      console.error('Block image upload error:', error);
+      setMessage({ text: error?.message || '이미지 업로드 중 오류가 발생했습니다.', type: 'error' });
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  // 배너 블록 이미지 삭제 함수
+  const handleBlockImageRemove = async () => {
+    if (!selectedBlock?.banner_image_url) return;
+
+    try {
+      // URL에서 파일 경로 추출
+      const url = new URL(selectedBlock.banner_image_url);
+      const pathParts = url.pathname.split('/');
+      const fileName = pathParts.slice(-3).join('/'); // user_id/store_id/filename
+
+      // Supabase Storage에서 삭제
+      const { error } = await supabase.storage
+        .from('store-images')
+        .remove([fileName]);
+
+      if (error) {
+        console.error('File deletion error:', error);
+      }
+
+      // 블록에서 이미지 URL 제거
+      updateSelectedBlockData('banner_image_url', '');
+      setMessage({ text: '이미지가 삭제되었습니다.', type: 'success' });
+
+    } catch (error: any) {
+      console.error('Block image removal error:', error);
+      setMessage({ text: '이미지 삭제 중 오류가 발생했습니다.', type: 'error' });
     }
   };
 
@@ -251,25 +453,45 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
   const getBlockTypeLabel = (type: string): string => {
     const labels: Record<string, string> = {
-      text: '텍스트',
-      grid: '제품 그리드',
-      featured: '피처드',
-      banner: '배너',
-      list: '리스트',
-      masonry: '메이슨리'
+      text: 'TEXT',
+      grid: 'PRODUCT GRID',
+      featured: 'FEATURED',
+      banner: 'BANNER',
+      list: 'LIST',
+      masonry: 'MASONRY'
     };
-    return labels[type] || type;
+    return labels[type] || type.toUpperCase();
   };
 
   const updateSelectedBlockData = (field: string, value: any) => {
     if (!selectedBlock || !design.row_layouts) return;
+    
+    // 숫자 값 안전 처리
+    let safeValue = value;
+    if (field === 'height' || field === 'min_height' || field === 'max_height') {
+      const numValue = typeof value === 'string' ? parseInt(value) : value;
+      
+      // NaN 체크
+      if (isNaN(numValue)) {
+        return; // 잘못된 값은 무시
+      }
+      
+      // 범위 체크 및 보정
+      if (field === 'height') {
+        safeValue = Math.max(50, Math.min(9999, numValue));
+      } else if (field === 'min_height') {
+        safeValue = Math.max(50, Math.min(500, numValue));
+      } else if (field === 'max_height') {
+        safeValue = Math.max(200, Math.min(9999, numValue));
+      }
+    }
     
     const blockIndex = selectedBlock.position;
     const updatedRowLayouts = {
       ...design.row_layouts,
       [blockIndex]: {
         ...design.row_layouts[blockIndex],
-        [field]: value
+        [field]: safeValue
       }
     };
 
@@ -280,7 +502,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
     setSelectedBlock(prev => prev ? {
       ...prev,
-      [field]: value
+      [field]: safeValue
     } : null);
   };
 
@@ -288,82 +510,89 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     const commonSettings = (
       <>
         <div>
-          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-            간격
+          <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+            ELEMENT SPACING
           </label>
-          <select
-            value={block.spacing || 'normal'}
-            onChange={(e) => updateSelectedBlockData('spacing', e.target.value)}
-            className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-          >
-            <option value="tight">좁음</option>
-            <option value="normal">보통</option>
-            <option value="loose">넓음</option>
-            <option value="extra-loose">매우 넓음</option>
-          </select>
+          <div className="border border-black">
+            <select
+              value={block.spacing || 'normal'}
+              onChange={(e) => updateSelectedBlockData('spacing', e.target.value)}
+              className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+            >
+              <option value="tight">TIGHT</option>
+              <option value="normal">NORMAL</option>
+              <option value="loose">LOOSE</option>
+              <option value="extra-loose">EXTRA LOOSE</option>
+            </select>
+          </div>
         </div>
 
         <div>
-          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-            텍스트 정렬
+          <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+            TEXT ALIGNMENT
           </label>
-          <select
-            value={block.text_alignment || 'left'}
-            onChange={(e) => updateSelectedBlockData('text_alignment', e.target.value)}
-            className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-          >
-            <option value="left">왼쪽</option>
-            <option value="center">중앙</option>
-            <option value="right">오른쪽</option>
-          </select>
+          <div className="border border-black">
+            <select
+              value={block.text_alignment || 'left'}
+              onChange={(e) => updateSelectedBlockData('text_alignment', e.target.value)}
+              className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+            >
+              <option value="left">LEFT</option>
+              <option value="center">CENTER</option>
+              <option value="right">RIGHT</option>
+            </select>
+          </div>
         </div>
 
         {/* 블록 너비 설정 */}
         <div>
-          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-            블록 너비
+          <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+            BLOCK WIDTH
           </label>
-          <select
-            value={block.block_width || DEFAULT_BLOCK_WIDTH}
-            onChange={(e) => updateSelectedBlockData('block_width', e.target.value)}
-            className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-          >
-            <option value="contained">컨테이너 내</option>
-            <option value="full-width">전체 너비</option>
-          </select>
-          <div className="mt-1 text-xs text-gray-400">
-            전체 너비 선택 시 좌우 마진이 무시되고 화면 끝까지 확장됩니다
+          <div className="border border-black">
+            <select
+              value={block.block_width || DEFAULT_BLOCK_WIDTH}
+              onChange={(e) => updateSelectedBlockData('block_width', e.target.value)}
+              className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+            >
+              <option value="contained">CONTAINED</option>
+              <option value="full-width">FULL WIDTH</option>
+            </select>
+          </div>
+          <div className="mt-2 text-xs text-gray-500 font-light tracking-wide">
+            Full width extends to screen edges, ignoring margins
           </div>
         </div>
 
         {/* 높이 조절 설정 - 모든 블록 타입에 적용 */}
         <div>
-          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-            블록 높이
+          <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+            BLOCK HEIGHT
           </label>
-          <div className="space-y-3">
+          <div className="space-y-6">
             {/* 높이 슬라이더 */}
-            <div className="relative">
+            <div className="relative border border-black p-4">
               <input
                 type="range"
                 min={block.min_height || 100}
                 max={Math.min(block.max_height || 5000, 5000)} 
+                step="5"
                 value={Math.min(block.height || 300, 5000)}
                 onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                className="w-full slider"
                 style={{
-                  background: `linear-gradient(to right, #374151 0%, #374151 ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
+                  background: `linear-gradient(to right, #000000 0%, #000000 ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
                 }}
               />
-              <div className="flex justify-between mt-1 text-xs text-gray-400">
-                <span>{block.min_height || 100}px</span>
-                <span className="font-medium text-gray-600">{block.height || 300}px</span>
-                <span>5000px</span>
+              <div className="flex justify-between mt-3 text-xs text-gray-500 font-light tracking-wide">
+                <span>{block.min_height || 100}PX</span>
+                <span className="text-black font-medium tracking-[0.1em]">{block.height || 300}PX</span>
+                <span>5000PX</span>
               </div>
             </div>
             
             {/* 수치 입력 */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center border border-black">
               <input
                 type="number"
                 value={block.height || 300}
@@ -371,67 +600,71 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 placeholder="300"
                 min={block.min_height || 100}
                 max={block.max_height || 9999}
-                className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none rounded"
+                className="flex-1 px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
               />
-              <span className="text-xs text-gray-500">px</span>
+              <span className="px-4 py-3 text-xs text-gray-500 font-light tracking-wide border-l border-black">PX</span>
             </div>
             
             {/* 최소/최대값 설정 */}
-            <details className="mt-2">
-              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
-                고급 설정
+            <details className="border border-black">
+              <summary className="px-4 py-3 text-xs text-gray-700 cursor-pointer hover:bg-gray-50 font-light tracking-[0.1em] uppercase">
+                ADVANCED SETTINGS
               </summary>
-              <div className="grid grid-cols-2 gap-2 mt-2">
+              <div className="border-t border-black p-4 space-y-4">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">최소 높이</label>
-                  <input
-                    type="number"
-                    value={block.min_height || 100}
-                    onChange={(e) => updateSelectedBlockData('min_height', parseInt(e.target.value) || 100)}
-                    placeholder="100"
-                    min="50"
-                    max="500"
-                    className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none rounded"
-                  />
+                  <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MIN HEIGHT</label>
+                  <div className="border border-gray-300">
+                    <input
+                      type="number"
+                      value={block.min_height || 100}
+                      onChange={(e) => updateSelectedBlockData('min_height', parseInt(e.target.value) || 100)}
+                      placeholder="100"
+                      min="50"
+                      max="500"
+                      className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">최대 높이</label>
-                  <input
-                    type="number"
-                    value={block.max_height || 9999}
-                    onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 9999)}
-                    placeholder="9999"
-                    min="200"
-                    max="9999"
-                    className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none rounded"
-                  />
+                  <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MAX HEIGHT</label>
+                  <div className="border border-gray-300">
+                    <input
+                      type="number"
+                      value={block.max_height || 9999}
+                      onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 9999)}
+                      placeholder="9999"
+                      min="200"
+                      max="9999"
+                      className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                    />
+                  </div>
                 </div>
               </div>
             </details>
             
-            <div className="text-xs text-gray-400">
-              슬라이더나 드래그로 높이를 조절할 수 있습니다
+            <div className="text-xs text-gray-500 font-light tracking-wide">
+              Use slider or input field to adjust height precisely
             </div>
           </div>
         </div>
 
         {block.background_color !== undefined && (
           <div>
-            <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-              배경색
+            <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+              BACKGROUND COLOR
             </label>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center border border-black">
               <input
                 type="color"
                 value={block.background_color || '#ffffff'}
                 onChange={(e) => updateSelectedBlockData('background_color', e.target.value)}
-                className="w-8 h-8 border border-gray-200 cursor-pointer"
+                className="w-12 h-12 border-0 cursor-pointer bg-transparent"
               />
               <input
                 type="text"
                 value={block.background_color || '#ffffff'}
                 onChange={(e) => updateSelectedBlockData('background_color', e.target.value)}
-                className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                className="flex-1 px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
               />
             </div>
           </div>
@@ -442,150 +675,142 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     switch (block.type) {
       case 'text':
         return (
-          <div className="space-y-4">
+          <div className="space-y-12">
             {commonSettings}
             
             <div>
-              <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                텍스트 내용
+              <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                TEXT CONTENT
               </label>
-              <textarea
-                value={block.text_content || ''}
-                onChange={(e) => updateSelectedBlockData('text_content', e.target.value)}
-                placeholder="텍스트를 입력하세요..."
-                rows={6}
-                className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none resize-none"
-              />
+              <div className="border border-black">
+                <textarea
+                  value={block.text_content || ''}
+                  onChange={(e) => updateSelectedBlockData('text_content', e.target.value)}
+                  placeholder="Enter your text content..."
+                  rows={6}
+                  className="w-full px-4 py-3 text-xs border-0 focus:outline-none resize-none bg-white font-light tracking-wide"
+                />
+              </div>
             </div>
             
             {/* 텍스트 스타일 및 크기 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-8">
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  텍스트 스타일
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  TEXT STYLE
                 </label>
-                <select
-                  value={block.text_style || 'paragraph'}
-                  onChange={(e) => updateSelectedBlockData('text_style', e.target.value)}
-                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                >
-                  <option value="paragraph">일반 문단</option>
-                  <option value="heading">제목</option>
-                  <option value="quote">인용문</option>
-                  <option value="highlight">강조</option>
-                </select>
+                <div className="border border-black">
+                  <select
+                    value={block.text_style || 'paragraph'}
+                    onChange={(e) => updateSelectedBlockData('text_style', e.target.value)}
+                    className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                  >
+                    <option value="paragraph">PARAGRAPH</option>
+                    <option value="heading">HEADING</option>
+                    <option value="quote">QUOTE</option>
+                    <option value="highlight">HIGHLIGHT</option>
+                  </select>
+                </div>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  텍스트 크기
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  TEXT SIZE
                 </label>
-                <select
-                  value={block.text_size || 'medium'}
-                  onChange={(e) => updateSelectedBlockData('text_size', e.target.value)}
-                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                >
-                  <option value="small">작음</option>
-                  <option value="medium">보통</option>
-                  <option value="large">큼</option>
-                  <option value="xl">매우 큼</option>
-                  <option value="xxl">초대형</option>
-                </select>
+                <div className="border border-black">
+                  <select
+                    value={block.text_size || 'medium'}
+                    onChange={(e) => updateSelectedBlockData('text_size', e.target.value)}
+                    className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                  >
+                    <option value="small">SMALL</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="large">LARGE</option>
+                    <option value="xl">EXTRA LARGE</option>
+                    <option value="xxl">XXL</option>
+                  </select>
+                </div>
               </div>
             </div>
 
             {/* 글꼴 굵기 및 색상 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-8">
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  글꼴 굵기
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  FONT WEIGHT
                 </label>
-                <select
-                  value={block.text_weight || 'normal'}
-                  onChange={(e) => updateSelectedBlockData('text_weight', e.target.value)}
-                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                >
-                  <option value="normal">보통</option>
-                  <option value="medium">중간</option>
-                  <option value="semibold">세미볼드</option>
-                  <option value="bold">굵게</option>
-                </select>
+                <div className="border border-black">
+                  <select
+                    value={block.text_weight || 'normal'}
+                    onChange={(e) => updateSelectedBlockData('text_weight', e.target.value)}
+                    className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                  >
+                    <option value="normal">NORMAL</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="semibold">SEMIBOLD</option>
+                    <option value="bold">BOLD</option>
+                  </select>
+                </div>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  텍스트 색상
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  TEXT COLOR
                 </label>
-                <div className="flex space-x-1">
+                <div className="flex items-center border border-black">
                   <input
                     type="color"
                     value={block.text_color || '#000000'}
                     onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
-                    className="w-8 h-6 border border-gray-200 cursor-pointer"
+                    className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                   />
                   <input
                     type="text"
                     value={block.text_color || '#000000'}
                     onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
                     placeholder="#000000"
-                    className="flex-1 px-1 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                    className="flex-1 px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
                   />
                 </div>
               </div>
             </div>
 
             {/* 레이아웃 설정 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-8">
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  최대 너비
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  MAXIMUM WIDTH
                 </label>
-                <select
-                  value={block.max_width || 'medium'}
-                  onChange={(e) => updateSelectedBlockData('max_width', e.target.value)}
-                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                >
-                  <option value="narrow">좁게</option>
-                  <option value="medium">보통</option>
-                  <option value="wide">넓게</option>
-                  <option value="full">전체 너비</option>
-                </select>
+                <div className="border border-black">
+                  <select
+                    value={block.max_width || 'medium'}
+                    onChange={(e) => updateSelectedBlockData('max_width', e.target.value)}
+                    className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                  >
+                    <option value="narrow">NARROW</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="wide">WIDE</option>
+                    <option value="full">FULL WIDTH</option>
+                  </select>
+                </div>
               </div>
               
               <div>
-                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                  패딩
+                <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                  PADDING
                 </label>
-                <select
-                  value={block.padding || 'medium'}
-                  onChange={(e) => updateSelectedBlockData('padding', e.target.value)}
-                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                >
-                  <option value="small">작게</option>
-                  <option value="medium">보통</option>
-                  <option value="large">크게</option>
-                  <option value="xl">매우 크게</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                텍스트 색상
-              </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="color"
-                  value={block.text_color || '#000000'}
-                  onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
-                  className="w-8 h-8 border border-gray-200 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={block.text_color || '#000000'}
-                  onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
-                  className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                />
+                <div className="border border-black">
+                  <select
+                    value={block.padding || 'medium'}
+                    onChange={(e) => updateSelectedBlockData('padding', e.target.value)}
+                    className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                  >
+                    <option value="small">SMALL</option>
+                    <option value="medium">MEDIUM</option>
+                    <option value="large">LARGE</option>
+                    <option value="xl">EXTRA LARGE</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -593,51 +818,144 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
       case 'grid':
         return (
-          <div className="space-y-4">
+          <div className="space-y-12">
             {commonSettings}
             
             <div>
-              <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                컬럼 수
+              <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                COLUMN COUNT
               </label>
-              <select
-                value={block.columns || 3}
-                onChange={(e) => updateSelectedBlockData('columns', parseInt(e.target.value))}
-                className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-              >
-                <option value={1}>1컬럼</option>
-                <option value={2}>2컬럼</option>
-                <option value={3}>3컬럼</option>
-                <option value={4}>4컬럼</option>
-                <option value={5}>5컬럼</option>
-                <option value={6}>6컬럼</option>
-              </select>
+              <div className="border border-black">
+                <select
+                  value={block.columns || 3}
+                  onChange={(e) => updateSelectedBlockData('columns', parseInt(e.target.value))}
+                  className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                >
+                  <option value={1}>1 COLUMN</option>
+                  <option value={2}>2 COLUMNS</option>
+                  <option value={3}>3 COLUMNS</option>
+                  <option value={4}>4 COLUMNS</option>
+                  <option value={5}>5 COLUMNS</option>
+                  <option value={6}>6 COLUMNS</option>
+                </select>
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                카드 스타일
+              <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                CARD STYLE
               </label>
-              <select
-                value={block.card_style || 'default'}
-                onChange={(e) => updateSelectedBlockData('card_style', e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-              >
-                <option value="default">기본</option>
-                <option value="compact">컴팩트</option>
-                <option value="detailed">상세</option>
-                <option value="large">대형</option>
-              </select>
+              <div className="border border-black">
+                <select
+                  value={block.card_style || 'default'}
+                  onChange={(e) => updateSelectedBlockData('card_style', e.target.value)}
+                  className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                >
+                  <option value="default">DEFAULT</option>
+                  <option value="compact">COMPACT</option>
+                  <option value="detailed">DETAILED</option>
+                  <option value="large">LARGE</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'banner':
+        return (
+          <div className="space-y-12">
+            {commonSettings}
+            
+            {/* 배너 이미지 업로드 */}
+            <div>
+              <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                BANNER IMAGE
+              </label>
+              <div className="space-y-6">
+                {block.banner_image_url ? (
+                  <div className="relative border border-black">
+                    <Image
+                      src={block.banner_image_url}
+                      alt="Banner Image"
+                      width={200}
+                      height={100}
+                      className="w-full h-20 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBlockImageRemove}
+                      className="absolute top-2 right-2 bg-black text-white text-xs px-3 py-1 hover:bg-white hover:text-black border border-black transition-all duration-300 uppercase font-light tracking-wide"
+                    >
+                      REMOVE
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full h-20 border border-black flex items-center justify-center bg-gray-50">
+                    <span className="text-xs text-gray-600 font-light tracking-wide uppercase">Upload Banner Image</span>
+                  </div>
+                )}
+                
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleBlockImageUpload(file);
+                      }
+                    }}
+                    className="sr-only"
+                    id={`banner-block-image-upload-${block.id}`}
+                    disabled={imageUploading}
+                  />
+                  <label
+                    htmlFor={`banner-block-image-upload-${block.id}`}
+                    className={`block w-full px-6 py-3 text-xs text-center border border-black cursor-pointer hover:bg-black hover:text-white transition-all duration-300 uppercase font-light tracking-[0.15em] ${
+                      imageUploading ? 'opacity-50 cursor-not-allowed' : 'bg-white text-black'
+                    }`}
+                  >
+                    {imageUploading ? 'UPLOADING...' : block.banner_image_url ? 'CHANGE IMAGE' : 'UPLOAD IMAGE'}
+                  </label>
+                </div>
+                
+                <div className="text-xs text-gray-500 font-light tracking-wide">
+                  JPG, PNG files (Maximum 5MB)
+                </div>
+              </div>
+            </div>
+
+            {/* 상점 헤더 표시 옵션 */}
+            <div className="border border-black p-6">
+              <label className="flex items-center space-x-4">
+                <input
+                  type="checkbox"
+                  checked={block.show_store_header ?? true}
+                  onChange={(e) => updateSelectedBlockData('show_store_header', e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <span className="text-xs text-gray-700 uppercase tracking-[0.15em] font-light">DISPLAY STORE HEADER</span>
+              </label>
+              <div className="mt-3 text-xs text-gray-500 font-light tracking-wide">
+                Shows store logo and title above the banner
+              </div>
             </div>
           </div>
         );
 
       default:
         return (
-          <div className="space-y-4">
+          <div className="space-y-12">
             {commonSettings}
-            <div className="text-center text-gray-500 text-xs">
-              {getBlockTypeLabel(block.type)} 블록 설정
+            <div className="text-center border border-black p-8 bg-gray-50">
+              <div className="w-12 h-12 mx-auto bg-black flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <div className="text-xs text-gray-700 font-light tracking-[0.15em] uppercase">
+                {getBlockTypeLabel(block.type)} BLOCK CONFIGURATION
+              </div>
             </div>
           </div>
         );
@@ -677,86 +995,96 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* 사이드바 토글 버튼 */}
-      <div className={`fixed top-4 z-50 transition-all duration-300 ${
-        sidebarOpen ? 'left-80' : 'left-4'
+      return (
+      <div className="min-h-screen bg-white flex">
+      {/* 사이드바 토글 버튼 - 디올 스타일 */}
+      <div className={`fixed top-1/2 -translate-y-1/2 z-50 transition-all duration-500 ${
+        sidebarOpen ? 'left-96' : 'left-0'
       }`}>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-4 bg-white shadow-xl border border-gray-200 hover:shadow-2xl transition-all duration-300"
+          className={`bg-black text-white border border-black hover:bg-white hover:text-black transition-all duration-300 flex flex-col items-center justify-center ${
+            sidebarOpen 
+              ? 'py-8 px-4' 
+              : 'py-16 px-5 border-l-0'
+          }`}
+          style={{
+            writingMode: 'vertical-rl',
+            textOrientation: 'mixed'
+          }}
         >
-          <div className="flex items-center space-x-3">
-            <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center space-y-4">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
               {sidebarOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               )}
             </svg>
             {!sidebarOpen && (
-              <span className="text-xs font-medium text-gray-900 uppercase tracking-wider">
-                Design Studio
-              </span>
+              <div className="text-xs font-light uppercase tracking-[0.3em] whitespace-nowrap">
+                <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+                  DESIGN ATELIER
+                </span>
+              </div>
             )}
           </div>
         </button>
       </div>
 
-      {/* 디자인 설정 사이드바 */}
-      <div className={`fixed left-0 top-0 h-full bg-white shadow-2xl border-r border-gray-200 transition-transform duration-300 z-40 ${
+      {/* 디자인 설정 사이드바 - 디올 스타일 */}
+      <div className={`fixed left-0 top-0 h-full bg-white border-r border-black transition-transform duration-500 z-40 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } w-80 overflow-y-auto`}>
+      } w-96 overflow-y-auto`}>
         <div className="flex flex-col h-full">
           {/* 헤더 섹션 */}
-          <div className="p-6 border-b border-gray-100">
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 mx-auto bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center mb-3">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+          <div className="px-8 py-12 border-b border-gray-900">
+            <div className="text-center mb-12">
+              <div className="w-16 h-16 mx-auto bg-black flex items-center justify-center mb-6">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-light text-gray-900 tracking-wider uppercase mb-1">
-                Design Studio
+              <h2 className="text-2xl font-light text-black tracking-[0.2em] uppercase mb-3">
+                Design Atelier
               </h2>
-              <p className="text-xs text-gray-500 font-light tracking-wide">
-                Craft Your Brand Experience
+              <p className="text-xs text-gray-600 font-light tracking-[0.15em] uppercase">
+                Haute Couture Experience
               </p>
             </div>
             
             {/* 탭 네비게이션 */}
-            <div className="flex bg-gray-50 p-1">
+            <div className="border border-black">
               <button
                 onClick={() => setActiveTab('design')}
-                className={`flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wide transition-all duration-200 ${
+                className={`w-full px-6 py-4 text-xs font-light uppercase tracking-[0.15em] transition-all duration-300 border-b border-black ${
                   activeTab === 'design'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-black text-white'
+                    : 'bg-white text-black hover:bg-gray-50'
                 }`}
               >
-                <div className="flex items-center justify-center space-x-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+                <div className="flex items-center justify-center space-x-3">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
                   </svg>
-                  <span>디자인</span>
+                  <span>Global Design</span>
                 </div>
               </button>
               <button
                 onClick={() => setActiveTab('block')}
-                className={`flex-1 px-4 py-2 text-xs font-medium uppercase tracking-wide transition-all duration-200 ${
+                className={`w-full px-6 py-4 text-xs font-light uppercase tracking-[0.15em] transition-all duration-300 ${
                   activeTab === 'block'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-black text-white'
+                    : 'bg-white text-black hover:bg-gray-50'
                 }`}
               >
-                <div className="flex items-center justify-center space-x-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                <div className="flex items-center justify-center space-x-3">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
-                  <span>블록</span>
+                  <span>Block Elements</span>
                   {selectedBlock && (
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-white"></div>
                   )}
                 </div>
               </button>
@@ -765,11 +1093,11 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           
           {/* 메시지 영역 */}
           {message && (
-            <div className="px-6 pt-4">
-              <div className={`px-4 py-3 border text-sm ${
+            <div className="px-8 pt-6">
+              <div className={`px-6 py-4 border text-sm font-light tracking-wide ${
                 message.type === 'success' 
-                  ? 'border-green-200 bg-green-50 text-green-700' 
-                  : 'border-red-200 bg-red-50 text-red-700'
+                  ? 'border-black bg-black text-white' 
+                  : 'border-black bg-white text-black'
               }`}>
                 {message.text}
               </div>
@@ -777,107 +1105,107 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           )}
           
           {/* 탭 콘텐츠 */}
-          <div className="flex-1 p-6">
+          <div className="flex-1 px-8 py-8">
             <form onSubmit={handleSubmit} className="h-full flex flex-col">
               {activeTab === 'design' && (
-                <div className="space-y-8 flex-1">
-                  <div className="bg-blue-50 border border-blue-200 p-4">
-                    <div className="flex items-start space-x-3">
-                      <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="space-y-12 flex-1">
+                  <div className="border border-black bg-gray-50 p-6">
+                    <div className="flex items-start space-x-4">
+                      <svg className="w-6 h-6 text-black mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div>
-                        <h4 className="text-sm font-medium text-blue-900 mb-1">글로벌 디자인 설정</h4>
-                        <p className="text-xs text-blue-700 leading-relaxed">
-                          여기서 변경하는 설정은 전체 상점에 적용됩니다. 개별 블록 설정은 "블록" 탭에서 할 수 있습니다.
+                        <h4 className="text-sm font-light text-black mb-2 uppercase tracking-[0.1em]">Global Design Configuration</h4>
+                        <p className="text-xs text-gray-600 font-light leading-relaxed tracking-wide">
+                          Configuration applied to the entire store collection. Individual block settings available in Block Elements tab.
                         </p>
                       </div>
                     </div>
                   </div>
 
                   {/* 색상 설정 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Color Palette
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      COLOR COMPOSITION
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-8">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          테마 색상
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Theme Signature
                         </label>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center border border-black">
                           <input
                             type="color"
                             value={design.theme_color || '#000000'}
                             onChange={(e) => updateDesign('theme_color', e.target.value)}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                            className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                           />
                           <input
                             type="text"
                             value={design.theme_color || '#000000'}
                             onChange={(e) => updateDesign('theme_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          강조 색상
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Accent Refinement
                         </label>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center border border-black">
                           <input
                             type="color"
                             value={design.accent_color || '#666666'}
                             onChange={(e) => updateDesign('accent_color', e.target.value)}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                            className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                           />
                           <input
                             type="text"
                             value={design.accent_color || '#666666'}
                             onChange={(e) => updateDesign('accent_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          배경 색상
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Canvas Foundation
                         </label>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center border border-black">
                           <input
                             type="color"
                             value={design.background_color || '#ffffff'}
                             onChange={(e) => updateDesign('background_color', e.target.value)}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                            className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                           />
                           <input
                             type="text"
                             value={design.background_color || '#ffffff'}
                             onChange={(e) => updateDesign('background_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          텍스트 색상
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Typography Tone
                         </label>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center border border-black">
                           <input
                             type="color"
                             value={design.text_color || '#000000'}
                             onChange={(e) => updateDesign('text_color', e.target.value)}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                            className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                           />
                           <input
                             type="text"
                             value={design.text_color || '#000000'}
                             onChange={(e) => updateDesign('text_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
                           />
                         </div>
                       </div>
@@ -885,82 +1213,84 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                   </div>
 
                   {/* 헤더 네비게이션 색상 설정 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Header Navigation
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      NAVIGATION ARCHITECTURE
                     </h3>
                     
-                    <div className="bg-yellow-50 border border-yellow-200 p-3 mb-4">
-                      <div className="flex items-start space-x-2">
-                        <svg className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <div className="border border-black bg-gray-50 p-6">
+                      <div className="flex items-start space-x-4">
+                        <svg className="w-6 h-6 text-black mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <div>
-                          <h4 className="text-xs font-medium text-yellow-900 mb-1">네비게이션 색상 설정</h4>
-                          <p className="text-xs text-yellow-700 leading-relaxed">
-                            PIETA 로고 폰트는 고정되며, 배경색과 아이콘 색상만 변경 가능합니다.
+                          <h4 className="text-xs font-light text-black mb-2 uppercase tracking-[0.1em]">Navigation Configuration</h4>
+                          <p className="text-xs text-gray-600 font-light leading-relaxed tracking-wide">
+                            PIETA logotype remains fixed, background and icon tones are customizable.
                           </p>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-8">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
                           Navigation Background
                         </label>
                         
                         {/* 색상 선택기와 텍스트 입력 */}
-                        <div className="flex items-center space-x-2 mb-3">
-                          <input
-                            type="color"
-                            value={(() => {
-                              const color = design.navbar_background_color;
-                              if (!color || color === 'rgba(255, 255, 255, 0)') return '#ffffff';
-                              if (color.startsWith('#')) return color;
-                              if (color.startsWith('rgba')) {
-                                const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
-                                if (match) {
-                                  const [, r, g, b] = match;
-                                  return `#${parseInt(r).toString(16).padStart(2, '0')}${parseInt(g).toString(16).padStart(2, '0')}${parseInt(b).toString(16).padStart(2, '0')}`;
+                        <div className="border border-black mb-6">
+                          <div className="flex items-center">
+                            <input
+                              type="color"
+                              value={(() => {
+                                const color = design.navbar_background_color;
+                                if (!color || color === 'rgba(255, 255, 255, 0)') return '#ffffff';
+                                if (color.startsWith('#')) return color;
+                                if (color.startsWith('rgba')) {
+                                  const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                  if (match) {
+                                    const [, r, g, b] = match;
+                                    return `#${parseInt(r).toString(16).padStart(2, '0')}${parseInt(g).toString(16).padStart(2, '0')}${parseInt(b).toString(16).padStart(2, '0')}`;
+                                  }
                                 }
-                              }
-                              return '#ffffff';
-                            })()}
-                            onChange={(e) => {
-                              const hexColor = e.target.value;
-                              const r = parseInt(hexColor.slice(1, 3), 16);
-                              const g = parseInt(hexColor.slice(3, 5), 16);
-                              const b = parseInt(hexColor.slice(5, 7), 16);
-                              
-                              // 현재 알파값 유지하거나 기본값 1 사용
-                              let alpha = 1;
-                              const currentColor = design.navbar_background_color;
-                              if (currentColor && currentColor.startsWith('rgba')) {
-                                const match = currentColor.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
-                                if (match) alpha = parseFloat(match[1]);
-                              }
-                              
-                              updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
-                            }}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
-                          />
-                          <input
-                            type="text"
-                            value={design.navbar_background_color || 'rgba(255, 255, 255, 0)'}
-                            onChange={(e) => updateDesign('navbar_background_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                            placeholder="rgba(255, 255, 255, 0), #ffffff 등"
-                          />
+                                return '#ffffff';
+                              })()}
+                              onChange={(e) => {
+                                const hexColor = e.target.value;
+                                const r = parseInt(hexColor.slice(1, 3), 16);
+                                const g = parseInt(hexColor.slice(3, 5), 16);
+                                const b = parseInt(hexColor.slice(5, 7), 16);
+                                
+                                // 현재 알파값 유지하거나 기본값 1 사용
+                                let alpha = 1;
+                                const currentColor = design.navbar_background_color;
+                                if (currentColor && currentColor.startsWith('rgba')) {
+                                  const match = currentColor.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                                  if (match) alpha = parseFloat(match[1]);
+                                }
+                                
+                                updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                              }}
+                              className="w-12 h-12 border-0 cursor-pointer bg-transparent"
+                            />
+                            <input
+                              type="text"
+                              value={design.navbar_background_color || 'rgba(255, 255, 255, 0)'}
+                              onChange={(e) => updateDesign('navbar_background_color', e.target.value)}
+                              className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                              placeholder="rgba(255, 255, 255, 0) or #ffffff"
+                            />
+                          </div>
                         </div>
                         
                         {/* 투명도 슬라이더 */}
-                        <div className="mb-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-xs text-gray-600 uppercase tracking-wide">
-                              투명도 (Alpha)
+                        <div className="mb-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <label className="text-xs text-gray-700 uppercase tracking-[0.15em] font-light">
+                              Opacity Control
                             </label>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-black font-light tracking-wider bg-gray-50 px-3 py-1 border border-black">
                               {(() => {
                                 const color = design.navbar_background_color;
                                 if (!color || color === 'rgba(255, 255, 255, 0)') return '0%';
@@ -972,87 +1302,59 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                               })()}
                             </span>
                           </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            value={(() => {
-                              const color = design.navbar_background_color;
-                              if (!color || color === 'rgba(255, 255, 255, 0)') return 0;
-                              if (color.startsWith('rgba')) {
-                                const match = color.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
-                                if (match) return parseFloat(match[1]);
-                              }
-                              return 1;
-                            })()}
-                            onChange={(e) => {
-                              const alpha = parseFloat(e.target.value);
-                              const color = design.navbar_background_color;
-                              
-                              let r = 255, g = 255, b = 255;
-                              
-                              if (color && color.startsWith('rgba')) {
-                                const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
-                                if (match) {
-                                  r = parseInt(match[1]);
-                                  g = parseInt(match[2]);
-                                  b = parseInt(match[3]);
+                          <div className="border border-black p-4 bg-gray-50">
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.005"
+                              value={(() => {
+                                const color = design.navbar_background_color;
+                                if (!color || color === 'rgba(255, 255, 255, 0)') return 0;
+                                if (color.startsWith('rgba')) {
+                                  const match = color.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                                  if (match) return parseFloat(match[1]);
                                 }
-                              } else if (color && color.startsWith('#')) {
-                                r = parseInt(color.slice(1, 3), 16);
-                                g = parseInt(color.slice(3, 5), 16);
-                                b = parseInt(color.slice(5, 7), 16);
-                              }
-                              
-                              updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
-                            }}
-                            className="w-full h-3 appearance-none cursor-pointer alpha-slider rounded-lg"
-                            style={{
-                              background: `
-                                linear-gradient(45deg, #ccc 25%, transparent 25%), 
-                                linear-gradient(-45deg, #ccc 25%, transparent 25%), 
-                                linear-gradient(45deg, transparent 75%, #ccc 75%), 
-                                linear-gradient(-45deg, transparent 75%, #ccc 75%),
-                                linear-gradient(to right, 
-                                  rgba(${(() => {
-                                    const color = design.navbar_background_color;
-                                    if (color && color.startsWith('rgba')) {
-                                      const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
-                                      if (match) {
-                                        const [, r, g, b] = match;
-                                        return `${r}, ${g}, ${b}`;
-                                      }
-                                    }
-                                    return '255, 255, 255';
-                                  })()}, 0) 0%, 
-                                  rgba(${(() => {
-                                    const color = design.navbar_background_color;
-                                    if (color && color.startsWith('rgba')) {
-                                      const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
-                                      if (match) {
-                                        const [, r, g, b] = match;
-                                        return `${r}, ${g}, ${b}`;
-                                      }
-                                    }
-                                    return '255, 255, 255';
-                                  })()}, 1) 100%)
-                              `,
-                              backgroundSize: '8px 8px, 8px 8px, 8px 8px, 8px 8px, 100% 100%',
-                              backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px, 0 0'
-                            }}
-                          />
+                                return 1;
+                              })()}
+                              onChange={(e) => {
+                                const alpha = parseFloat(e.target.value);
+                                const color = design.navbar_background_color;
+                                
+                                let r = 255, g = 255, b = 255;
+                                
+                                if (color && color.startsWith('rgba')) {
+                                  const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                  if (match) {
+                                    r = parseInt(match[1]);
+                                    g = parseInt(match[2]);
+                                    b = parseInt(match[3]);
+                                  }
+                                } else if (color && color.startsWith('#')) {
+                                  r = parseInt(color.slice(1, 3), 16);
+                                  g = parseInt(color.slice(3, 5), 16);
+                                  b = parseInt(color.slice(5, 7), 16);
+                                }
+                                
+                                updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                              }}
+                              className="w-full h-4 appearance-none cursor-pointer bg-white border border-black"
+                              style={{
+                                background: `linear-gradient(to right, transparent 0%, black 100%)`
+                              }}
+                            />
+                          </div>
                         </div>
                         
                         {/* 빠른 투명도 프리셋 */}
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-gray-600 uppercase tracking-wide">빠른 설정:</span>
-                          <div className="flex space-x-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-700 uppercase tracking-[0.15em] font-light">Quick Presets:</span>
+                          <div className="flex">
                             {[
-                              { label: '투명', value: 0 },
-                              { label: '반투명', value: 0.5 },
-                              { label: '불투명', value: 1 }
-                            ].map((preset) => (
+                              { label: 'TRANSPARENT', value: 0 },
+                              { label: 'TRANSLUCENT', value: 0.5 },
+                              { label: 'OPAQUE', value: 1 }
+                            ].map((preset, index) => (
                               <button
                                 key={preset.label}
                                 type="button"
@@ -1077,7 +1379,9 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                                   
                                   updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
                                 }}
-                                className="px-2 py-1 text-xs border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors rounded"
+                                className={`px-4 py-2 text-xs font-light tracking-wider border border-black bg-white hover:bg-black hover:text-white transition-all duration-300 ${
+                                  index === 0 ? '' : 'border-l-0'
+                                }`}
                               >
                                 {preset.label}
                               </button>
@@ -1112,22 +1416,22 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          Icon Colors
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Icon Tone
                         </label>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center border border-black">
                           <input
                             type="color"
                             value={design.navbar_icon_color || '#ffffff'}
                             onChange={(e) => updateDesign('navbar_icon_color', e.target.value)}
-                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                            className="w-12 h-12 border-0 cursor-pointer bg-transparent"
                           />
                           <input
                             type="text"
                             value={design.navbar_icon_color || '#ffffff'}
                             onChange={(e) => updateDesign('navbar_icon_color', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                            placeholder="#ffffff, rgba(255, 255, 255, 1) 등"
+                            className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                            placeholder="#ffffff or rgba(255, 255, 255, 1)"
                           />
                         </div>
                       </div>
@@ -1135,68 +1439,74 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                   </div>
 
                   {/* 네비게이션 바 마진 설정 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Navigation Margin
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      NAVIGATION SPACING
                     </h3>
                     
-                    <div className="bg-blue-50 border border-blue-200 p-3 mb-4">
-                      <div className="flex items-start space-x-2">
-                        <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <div className="border border-black bg-gray-50 p-6">
+                      <div className="flex items-start space-x-4">
+                        <svg className="w-6 h-6 text-black mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <div>
-                          <h4 className="text-xs font-medium text-blue-900 mb-1">네비게이션 바와 콘텐츠 간격</h4>
-                          <p className="text-xs text-blue-700 leading-relaxed">
-                            네비게이션 바 아래쪽과 페이지 콘텐츠 사이의 마진을 설정합니다.
+                          <h4 className="text-xs font-light text-black mb-2 uppercase tracking-[0.1em]">Vertical Content Spacing</h4>
+                          <p className="text-xs text-gray-600 font-light leading-relaxed tracking-wide">
+                            Configure the margin between navigation bar and page content.
                           </p>
                         </div>
                       </div>
                     </div>
                     
-                    <div className="space-y-4">
+                    <div className="space-y-8">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          마진 모드
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Spacing Mode
                         </label>
-                        <select
-                          value={design.navbar_margin_mode || 'navbar-height'}
-                          onChange={(e) => updateDesign('navbar_margin_mode', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="none">마진 없음 (네비게이션 바에 붙임)</option>
-                          <option value="navbar-height">네비게이션 바 높이만큼 (기본)</option>
-                          <option value="custom">커스텀 마진</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          "마진 없음"을 선택하면 첫 번째 콘텐츠가 네비게이션 바 바로 아래에 붙습니다.
+                        <div className="border border-black">
+                          <select
+                            value={design.navbar_margin_mode || 'navbar-height'}
+                            onChange={(e) => updateDesign('navbar_margin_mode', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="none">NO MARGIN (Flush to Navigation)</option>
+                            <option value="navbar-height">NAVIGATION HEIGHT (Default)</option>
+                            <option value="custom">CUSTOM MARGIN</option>
+                          </select>
+                        </div>
+                        <p className="text-xs text-gray-600 font-light mt-4 tracking-wide">
+                          No margin aligns content directly beneath the navigation bar.
                         </p>
                       </div>
 
                       {design.navbar_margin_mode === 'custom' && (
                         <div>
-                          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                            커스텀 마진 (픽셀)
+                          <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                            Custom Margin (Pixels)
                           </label>
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="200"
-                              step="4"
-                              value={design.custom_navbar_margin || 64}
-                              onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value))}
-                              className="flex-1"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              max="500"
-                              value={design.custom_navbar_margin || 64}
-                              onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value) || 0)}
-                              className="w-16 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none text-center"
-                            />
-                            <span className="text-xs text-gray-500">px</span>
+                          <div className="border border-black p-4 bg-gray-50">
+                            <div className="flex items-center space-x-4">
+                              <input
+                                type="range"
+                                min="0"
+                                max="200"
+                                step="1"
+                                value={design.custom_navbar_margin ?? 64}
+                                onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value))}
+                                className="flex-1 h-1 bg-white border border-black cursor-pointer"
+                              />
+                              <div className="flex items-center border border-black bg-white">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="500"
+                                  value={design.custom_navbar_margin ?? 64}
+                                  onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value) ?? 0)}
+                                  className="w-20 px-3 py-2 text-xs font-light tracking-wider border-0 focus:outline-none text-center"
+                                />
+                                <span className="text-xs text-gray-600 font-light px-2">px</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1204,228 +1514,337 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                   </div>
 
                   {/* 레이아웃 설정 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Layout Settings
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      LAYOUT ARCHITECTURE
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-8">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          헤더 스타일
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Header Style
                         </label>
-                        <select
-                          value={design.header_style || 'modern'}
-                          onChange={(e) => updateDesign('header_style', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="minimal">미니멀</option>
-                          <option value="classic">클래식</option>
-                          <option value="modern">모던</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.header_style || 'modern'}
+                            onChange={(e) => updateDesign('header_style', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="minimal">MINIMAL</option>
+                            <option value="classic">CLASSIC</option>
+                            <option value="modern">MODERN</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          제품 카드 스타일
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Product Card Style
                         </label>
-                        <select
-                          value={design.product_card_style || 'default'}
-                          onChange={(e) => updateDesign('product_card_style', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="default">기본</option>
-                          <option value="compact">컴팩트</option>
-                          <option value="detailed">상세</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.product_card_style || 'default'}
+                            onChange={(e) => updateDesign('product_card_style', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="default">DEFAULT</option>
+                            <option value="compact">COMPACT</option>
+                            <option value="detailed">DETAILED</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          배너 높이
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Banner Height
                         </label>
-                        <select
-                          value={design.banner_height || 'medium'}
-                          onChange={(e) => updateDesign('banner_height', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="small">작음</option>
-                          <option value="medium">보통</option>
-                          <option value="large">큼</option>
-                          <option value="full">전체화면</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.banner_height || 'medium'}
+                            onChange={(e) => updateDesign('banner_height', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="small">SMALL</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="large">LARGE</option>
+                            <option value="full">FULL SCREEN</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          로고 위치
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Logo Position
                         </label>
-                        <select
-                          value={design.logo_position || 'center'}
-                          onChange={(e) => updateDesign('logo_position', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="left">왼쪽</option>
-                          <option value="center">중앙</option>
-                          <option value="right">오른쪽</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.logo_position || 'center'}
+                            onChange={(e) => updateDesign('logo_position', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="left">LEFT</option>
+                            <option value="center">CENTER</option>
+                            <option value="right">RIGHT</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 표시 옵션 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Display Options
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      DISPLAY CONFIGURATION
                     </h3>
                     
-                    <div className="space-y-3">
-                      <label className="flex items-center space-x-3">
+                    <div className="space-y-6">
+                      <label className="flex items-center space-x-4 border border-black p-4 bg-gray-50 hover:bg-white transition-colors duration-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={design.show_store_description || false}
                           onChange={(e) => updateDesign('show_store_description', e.target.checked)}
-                          className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-500 focus:ring-2"
+                          className="w-4 h-4 text-black border-black focus:ring-black focus:ring-1"
                         />
-                        <span className="text-xs text-gray-700 uppercase tracking-wide">상점 설명 표시</span>
+                        <span className="text-xs text-black font-light uppercase tracking-[0.15em]">Store Description Display</span>
                       </label>
 
-                      <label className="flex items-center space-x-3">
+                      <label className="flex items-center space-x-4 border border-black p-4 bg-gray-50 hover:bg-white transition-colors duration-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={design.show_contact_info || false}
                           onChange={(e) => updateDesign('show_contact_info', e.target.checked)}
-                          className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-500 focus:ring-2"
+                          className="w-4 h-4 text-black border-black focus:ring-black focus:ring-1"
                         />
-                        <span className="text-xs text-gray-700 uppercase tracking-wide">연락처 정보 표시</span>
+                        <span className="text-xs text-black font-light uppercase tracking-[0.15em]">Contact Information Display</span>
                       </label>
 
-                      <label className="flex items-center space-x-3">
+                      <label className="flex items-center space-x-4 border border-black p-4 bg-gray-50 hover:bg-white transition-colors duration-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={design.show_business_hours || false}
                           onChange={(e) => updateDesign('show_business_hours', e.target.checked)}
-                          className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-500 focus:ring-2"
+                          className="w-4 h-4 text-black border-black focus:ring-black focus:ring-1"
                         />
-                        <span className="text-xs text-gray-700 uppercase tracking-wide">영업시간 표시</span>
+                        <span className="text-xs text-black font-light uppercase tracking-[0.15em]">Business Hours Display</span>
                       </label>
                     </div>
                   </div>
 
                   {/* 타이포그래피 */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
-                      Typography
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      TYPOGRAPHY SYSTEM
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-8">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          제목 크기
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Title Scale
                         </label>
-                        <select
-                          value={design.title_font_size || 'large'}
-                          onChange={(e) => updateDesign('title_font_size', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="small">작음</option>
-                          <option value="medium">보통</option>
-                          <option value="large">큼</option>
-                          <option value="xl">매우 큼</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.title_font_size || 'large'}
+                            onChange={(e) => updateDesign('title_font_size', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="small">SMALL</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="large">LARGE</option>
+                            <option value="xl">EXTRA LARGE</option>
+                          </select>
+                        </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          설명 크기
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Description Scale
                         </label>
-                        <select
-                          value={design.description_font_size || 'medium'}
-                          onChange={(e) => updateDesign('description_font_size', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="small">작음</option>
-                          <option value="medium">보통</option>
-                          <option value="large">큼</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.description_font_size || 'medium'}
+                            onChange={(e) => updateDesign('description_font_size', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="small">SMALL</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="large">LARGE</option>
+                          </select>
+                        </div>
                       </div>
 
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          폰트 패밀리
+                      <div>
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Font Family
                         </label>
-                        <select
-                          value={design.font_family || 'Inter'}
-                          onChange={(e) => updateDesign('font_family', e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                        >
-                          <option value="Inter">Inter</option>
-                          <option value="Noto Sans KR">Noto Sans KR</option>
-                          <option value="Roboto">Roboto</option>
-                          <option value="Open Sans">Open Sans</option>
-                          <option value="Lato">Lato</option>
-                        </select>
+                        <div className="border border-black">
+                          <select
+                            value={design.font_family || 'Inter'}
+                            onChange={(e) => updateDesign('font_family', e.target.value)}
+                            className="w-full px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none bg-white"
+                          >
+                            <option value="Inter">INTER</option>
+                            <option value="Noto Sans KR">NOTO SANS KR</option>
+                            <option value="Roboto">ROBOTO</option>
+                            <option value="Open Sans">OPEN SANS</option>
+                            <option value="Lato">LATO</option>
+                          </select>
+                        </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* 컨테이너 설정 */}
+                  <div className="space-y-8">
+                    <h3 className="text-sm font-light text-black uppercase tracking-[0.2em] border-b border-black pb-4">
+                      CONTAINER ARCHITECTURE
+                    </h3>
+                    
+                    <div className="space-y-8">
+                      {/* 컨테이너 최대 너비 슬라이더 */}
+                      <div>
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Container Maximum Width
+                        </label>
+                        <div className="border border-black p-6 bg-gray-50">
+                          <div className="space-y-4">
+                            <div className="relative">
+                              <input
+                                type="range"
+                                min="30"
+                                max="100"
+                                step="0.5"
+                                value={design.container_max_width ?? 85}
+                                onChange={(e) => updateDesign('container_max_width', parseFloat(e.target.value))}
+                                className="w-full h-1 bg-white border border-black appearance-none cursor-pointer"
+                              />
+                              <div className="flex justify-between mt-3 text-xs text-gray-600 font-light">
+                                <span>30%</span>
+                                <span className="font-light text-black tracking-wider">{(design.container_max_width ?? 85).toFixed(1)}%</span>
+                                <span>100%</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center border border-black bg-white">
+                              <input
+                                type="number"
+                                value={(design.container_max_width ?? 85).toFixed(1)}
+                                onChange={(e) => updateDesign('container_max_width', parseFloat(e.target.value) ?? 85)}
+                                placeholder="85.0"
+                                min="30"
+                                max="100"
+                                step="0.5"
+                                className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none"
+                              />
+                              <span className="text-xs text-gray-600 font-light px-3">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 컨테이너 패딩 슬라이더 */}
+                      <div>
+                        <label className="block text-xs text-gray-700 mb-4 uppercase tracking-[0.15em] font-light">
+                          Container Padding
+                        </label>
+                        <div className="border border-black p-6 bg-gray-50">
+                          <div className="space-y-4">
+                            <div className="relative">
+                              <input
+                                type="range"
+                                min="0"
+                                max="20"
+                                step="0.1"
+                                value={design.container_padding ?? 4}
+                                onChange={(e) => updateDesign('container_padding', parseFloat(e.target.value))}
+                                className="w-full h-1 bg-white border border-black appearance-none cursor-pointer"
+                              />
+                              <div className="flex justify-between mt-3 text-xs text-gray-600 font-light">
+                                <span>0%</span>
+                                <span className="font-light text-black tracking-wider">{(design.container_padding ?? 4).toFixed(1)}%</span>
+                                <span>20%</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center border border-black bg-white">
+                              <input
+                                type="number"
+                                value={(design.container_padding ?? 4).toFixed(1)}
+                                onChange={(e) => updateDesign('container_padding', parseFloat(e.target.value) ?? 4)}
+                                placeholder="4.0"
+                                min="0"
+                                max="20"
+                                step="0.1"
+                                className="flex-1 px-4 py-3 text-xs font-light tracking-wider border-0 focus:outline-none"
+                              />
+                              <span className="text-xs text-gray-600 font-light px-3">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-xs text-gray-600 font-light tracking-wide">
+                      Container settings apply exclusively to "contained" block elements
                     </div>
                   </div>
                 </div>
               )}
 
               {activeTab === 'block' && (
-                <div className="space-y-6 flex-1">
+                <div className="space-y-12 flex-1">
                   {selectedBlock ? (
                     <div>
-                      <div className="flex items-center space-x-3 mb-6">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-black">
+                        <div className="w-12 h-12 bg-black flex items-center justify-center">
+                          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                           </svg>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
-                            {getBlockTypeLabel(selectedBlock.type)} 블록
+                          <h3 className="text-sm font-light text-black uppercase tracking-[0.2em]">
+                            {getBlockTypeLabel(selectedBlock.type)} Element
                           </h3>
-                          <p className="text-xs text-gray-500">
-                            블록 #{selectedBlock.position + 1} 설정
+                          <p className="text-xs text-gray-600 font-light tracking-wider">
+                            Block #{selectedBlock.position + 1} Configuration
                           </p>
                         </div>
                       </div>
                       
-                      <div className="space-y-6">
+                      <div className="space-y-8">
                         {renderBlockSettings(selectedBlock)}
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center space-y-6">
-                      <div className="w-20 h-20 mx-auto bg-gray-100 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    <div className="text-center space-y-12">
+                      <div className="w-24 h-24 mx-auto bg-gray-50 border border-black flex items-center justify-center">
+                        <svg className="w-10 h-10 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
                       </div>
 
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900 mb-2">
-                          블록을 선택해주세요
+                        <h3 className="text-sm font-light text-black mb-4 uppercase tracking-[0.2em]">
+                          SELECT ELEMENT
                         </h3>
-                        <p className="text-xs text-gray-500 leading-relaxed">
-                          우측 미리보기에서 편집하고 싶은 블록을 클릭하면<br/>
-                          해당 블록의 설정을 여기에서 변경할 수 있습니다.
+                        <p className="text-xs text-gray-600 font-light leading-relaxed tracking-wide">
+                          Click on an element in the preview to configure<br/>
+                          its specific properties and styling options.
                         </p>
                       </div>
 
-                      <div className="bg-gray-50 border border-gray-200 p-4">
-                        <div className="space-y-3 text-xs text-gray-600">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span>블록 클릭: 선택 및 설정</span>
+                      <div className="border border-black bg-gray-50 p-6">
+                        <div className="space-y-4 text-xs text-gray-700 font-light">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-2 h-2 bg-black"></div>
+                            <span className="tracking-wide">CLICK: Select & Configure</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span>더블클릭: 블록 탭 열기</span>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-2 h-2 bg-black"></div>
+                            <span className="tracking-wide">DOUBLE CLICK: Open Block Tab</span>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            <span>드래그: 순서 변경</span>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-2 h-2 bg-black"></div>
+                            <span className="tracking-wide">DRAG: Reorder Elements</span>
                           </div>
                         </div>
                       </div>
@@ -1435,21 +1854,21 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
               )}
               
               {/* 저장 및 취소 버튼 */}
-              <div className="pt-6 border-t border-gray-200 mt-auto">
-                <div className="flex space-x-3">
+              <div className="pt-8 border-t border-black mt-auto">
+                <div className="flex">
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 text-sm font-medium tracking-wider uppercase hover:bg-gray-50 transition-colors duration-300"
+                    className="flex-1 px-8 py-4 border border-black bg-white text-black text-xs font-light tracking-[0.2em] uppercase hover:bg-black hover:text-white transition-all duration-300 border-r-0"
                   >
                     CANCEL
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 px-6 py-3 bg-gray-900 text-white text-sm font-medium tracking-wider uppercase hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-300"
+                    className="flex-1 px-8 py-4 border border-black bg-black text-white text-xs font-light tracking-[0.2em] uppercase hover:bg-white hover:text-black disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
                   >
-                    {loading ? 'SAVING...' : 'SAVE DESIGN'}
+                    {loading ? 'PRESERVING...' : 'PRESERVE DESIGN'}
                   </button>
                 </div>
               </div>
@@ -1460,10 +1879,12 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
       {/* 메인 콘텐츠 - 우측 미리보기 영역 */}
       <div 
-        className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'ml-80' : 'ml-0'}`}
+        className={`flex-1 transition-all duration-500 ${sidebarOpen ? 'ml-96' : 'ml-0'} border-l border-black bg-gray-50`}
         style={{
-          '--sidebar-width': sidebarOpen ? '20rem' : '0rem',
-          '--sidebar-open': sidebarOpen ? '1' : '0'
+          '--sidebar-width': sidebarOpen ? '24rem' : '0rem',
+          '--sidebar-open': sidebarOpen ? '1' : '0',
+          maxWidth: sidebarOpen ? 'calc(100vw - 24rem)' : '100vw',
+          width: sidebarOpen ? 'calc(100vw - 24rem)' : '100vw'
         } as React.CSSProperties}
       >
         <div className="store-design-preview">
@@ -1475,6 +1896,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             storeData={storeData}
             onSelectedBlockChange={handleSelectedBlockChange}
             onBlockDoubleClick={handleBlockDoubleClick}
+            sidebarOpen={sidebarOpen}
           />
         </div>
       </div>
@@ -1486,135 +1908,99 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           overflow-x: hidden; /* 가로 스크롤 방지 */
         }
         
-        /* 높이 조절 슬라이더 스타일 */
+        /* 디올 스타일 슬라이더 */
         :global(.slider) {
           -webkit-appearance: none;
           appearance: none;
           outline: none;
+          background: #ffffff;
+          border: 1px solid #000000;
         }
         
         :global(.slider::-webkit-slider-thumb) {
           -webkit-appearance: none;
           appearance: none;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #374151;
-          border: 2px solid #ffffff;
+          width: 16px;
+          height: 16px;
+          background: #000000;
+          border: 1px solid #000000;
           cursor: pointer;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          transition: all 0.2s ease;
+          transition: all 0.3s ease;
         }
         
         :global(.slider::-webkit-slider-thumb:hover) {
-          background: #1f2937;
-          transform: scale(1.1);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+          background: #ffffff;
+          border: 2px solid #000000;
         }
         
         :global(.slider::-moz-range-thumb) {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #374151;
-          border: 2px solid #ffffff;
+          width: 16px;
+          height: 16px;
+          background: #000000;
+          border: 1px solid #000000;
           cursor: pointer;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          transition: all 0.2s ease;
+          transition: all 0.3s ease;
         }
         
         :global(.slider::-moz-range-thumb:hover) {
-          background: #1f2937;
-          transform: scale(1.1);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+          background: #ffffff;
+          border: 2px solid #000000;
         }
 
-        /* 알파 슬라이더 스타일 */
-        :global(.alpha-slider) {
+        /* 디올 체크박스 스타일 */
+        :global(input[type="checkbox"]) {
           -webkit-appearance: none;
           appearance: none;
-          outline: none;
-          border: 1px solid #d1d5db;
-        }
-        
-        :global(.alpha-slider::-webkit-slider-thumb) {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
+          width: 1rem;
+          height: 1rem;
+          border: 1px solid #000000;
           background: #ffffff;
-          border: 2px solid #374151;
           cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-          transition: all 0.2s ease;
+          transition: all 0.3s ease;
         }
         
-        :global(.alpha-slider::-webkit-slider-thumb:hover) {
-          border-color: #1f2937;
-          transform: scale(1.1);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        :global(input[type="checkbox"]:checked) {
+          background: #000000;
+          border: 1px solid #000000;
         }
         
-        :global(.alpha-slider::-moz-range-thumb) {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #ffffff;
-          border: 2px solid #374151;
-          cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-          transition: all 0.2s ease;
+        :global(input[type="checkbox"]:checked::after) {
+          content: '✓';
+          color: #ffffff;
+          font-size: 0.75rem;
+          font-weight: 300;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         
-        :global(.alpha-slider::-moz-range-thumb:hover) {
-          border-color: #1f2937;
-          transform: scale(1.1);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        :global(input[type="checkbox"]:hover) {
+          border: 2px solid #000000;
         }
         
-        /* contained 블록은 적절한 컨테이너와 패딩 유지 */
-        .store-design-preview :global(.inline-block:not([style*="calc(100% + 4rem)"])) {
-          max-width: 1280px; /* max-w-7xl equivalent */
-          margin-left: auto;
-          margin-right: auto;
-          padding-left: 1rem; /* px-4 equivalent */
-          padding-right: 1rem;
-        }
+        /* contained 블록 컨테이너 스타일은 이제 BasicInlinePreviewArea에서 직접 처리 */
         
-        /* 중간 이상 화면에서 패딩 증가 */
-        @media (min-width: 640px) {
-          .store-design-preview :global(.inline-block:not([style*="calc(100% + 4rem)"])) {
-            padding-left: 1.5rem; /* sm:px-6 equivalent */
-            padding-right: 1.5rem;
-          }
-        }
-        
-        @media (min-width: 1024px) {
-          .store-design-preview :global(.inline-block:not([style*="calc(100% + 4rem)"])) {
-            padding-left: 2rem; /* lg:px-8 equivalent */
-            padding-right: 2rem;
-          }
-        }
-        
-        /* full-width 블록은 사용 가능한 전체 너비 사용 */
+        /* 풀 와이드 블록 컨테이너 설정 */
         .store-design-preview :global([style*="calc(100% + 4rem)"]) {
-          /* 사이드바 상태에 따른 동적 너비 */
           width: calc(100vw - var(--sidebar-width, 0rem)) !important;
           max-width: none !important;
-          transition: width 0.3s ease, margin-left 0.3s ease !important;
-          /* 사이드바가 열렸을 때: 사이드바 끝에서 시작 */
+          transition: width 0.5s ease, margin-left 0.5s ease !important;
           margin-left: calc(-50vw + 50% + var(--sidebar-width, 0rem) / 2) !important;
           margin-right: calc(-50vw + 50%) !important;
         }
         
-        /* 모바일에서는 사이드바가 오버레이이므로 전체 너비 유지 */
+        /* 모바일 반응형 설정 */
         @media (max-width: 1023px) {
           .store-design-preview :global([style*="calc(100% + 4rem)"]) {
             width: 100vw !important;
             margin-left: calc(-50vw + 50%) !important;
             margin-right: calc(-50vw + 50%) !important;
           }
+        }
+
+        /* 디올 스타일 전용 애니메이션 */
+        :global(.dior-transition) {
+          transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
     </div>

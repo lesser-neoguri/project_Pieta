@@ -472,74 +472,63 @@ export default function CreateProductPage() {
         aspectRatio={1}
       />
       
-      {/* 플로팅 액션 메뉴 */}
-      <div className="fixed bottom-6 right-6 z-40 group">
-        {/* 호버 시 나타나는 추가 액션들 */}
-        <div className="absolute bottom-16 right-0 mb-2 opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 ease-out space-y-3">
-          {/* 취소 버튼 */}
-          <div className="relative">
-            <button
-              onClick={() => router.push(`/store/${storeId}`)}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white font-medium shadow-lg hover:bg-gray-700 hover:shadow-xl transition-all duration-200 group/item"
-              style={{ borderRadius: '25px' }}
-            >
-              <svg className="w-4 h-4 transition-transform group-hover/item:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              <span className="text-sm">취소</span>
-            </button>
-          </div>
-        </div>
-        
-        {/* 메인 등록 버튼 */}
-        <button
-          data-create-button
-          onClick={() => {
-            // 상태는 ProductForm의 콜백으로 관리되므로 여기서는 폼 제출만 실행
-            const event = new Event('submit', { bubbles: true, cancelable: true });
-            const form = document.querySelector('form');
-            if (form) form.dispatchEvent(event);
-          }}
-          disabled={saveStatus === 'saving'}
-          className={`relative flex items-center space-x-2 px-6 py-3 font-medium shadow-xl transition-all duration-300 hover:scale-105 group-hover:shadow-2xl ${
-            saveStatus === 'saving' 
-              ? 'bg-gray-400 text-white cursor-not-allowed' 
-              : saveStatus === 'saved'
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-black text-white hover:bg-gray-900'
-          }`}
-          style={{ borderRadius: '50px' }}
-        >
-          {saveStatus === 'saving' ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>등록 중...</span>
-            </>
-          ) : saveStatus === 'saved' ? (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-              </svg>
-              <span>등록됨</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>등록하기</span>
-            </>
-          )}
-          
-          {/* 호버 힌트 */}
-          <div className="absolute top-1/2 -left-4 transform -translate-y-1/2 -translate-x-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50">
-            <div className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow-lg whitespace-nowrap">
-              호버하여 더 많은 옵션 보기
-              {/* 말풍선 꼬리 */}
-              <div className="absolute top-1/2 left-full transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-4 border-t-transparent border-b-transparent border-l-gray-800"></div>
+      {/* DIOR 스타일 제품 등록 메뉴 */}
+      <div className="fixed bottom-8 right-8 z-50">
+        {/* 메인 관리 버튼 */}
+        <div className="group">
+          {/* 호버 시 나타나는 메뉴들 */}
+          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 mb-4 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 ease-out space-y-1">
+            
+            {/* 취소 버튼 */}
+            <div className="relative">
+              <button
+                onClick={() => router.push(`/store/${storeId}`)}
+                className="flex items-center justify-center px-6 py-4 bg-white text-black border border-gray-100 hover:border-black font-light transition-all duration-300 group/item w-[140px]"
+              >
+                <span className="text-xs font-light tracking-[0.15em] uppercase text-center w-full">CANCEL</span>
+              </button>
+            </div>
+
+            {/* 등록 버튼 */}
+            <div className="relative">
+              <button
+                data-create-button
+                onClick={() => {
+                  // 상태는 ProductForm의 콜백으로 관리되므로 여기서는 폼 제출만 실행
+                  const event = new Event('submit', { bubbles: true, cancelable: true });
+                  const form = document.querySelector('form');
+                  if (form) form.dispatchEvent(event);
+                }}
+                disabled={saveStatus === 'saving'}
+                className={`flex items-center justify-center px-6 py-4 font-light transition-all duration-300 group/item w-[140px] ${
+                  saveStatus === 'saving' 
+                    ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed' 
+                    : saveStatus === 'saved'
+                    ? 'bg-green-600 text-white border border-green-600 hover:bg-green-700'
+                    : 'bg-black text-white border border-black hover:bg-white hover:text-black'
+                }`}
+              >
+                <span className="text-xs font-light tracking-[0.15em] uppercase text-center w-full">
+                  {saveStatus === 'saving' ? 'CREATING...' : saveStatus === 'saved' ? 'CREATED' : 'CREATE'}
+                </span>
+              </button>
             </div>
           </div>
-        </button>
+
+          {/* 메인 토글 버튼 */}
+          <button className="flex items-center justify-center w-10 h-10 bg-white text-black border border-gray-200 hover:border-black transition-all duration-300 shadow-sm hover:shadow-md">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </button>
+
+          {/* 하단 라벨 */}
+          <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+            <div className="bg-white text-black text-xs px-3 py-2 border border-gray-100 font-light tracking-[0.1em] uppercase whitespace-nowrap text-center">
+              Product Create
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

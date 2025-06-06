@@ -21,6 +21,8 @@ import { v4 as uuidv4 } from 'uuid';
 export type BlockWidth = 'contained' | 'full-width';
 export type Spacing = 'tight' | 'normal' | 'loose' | 'extra-loose';
 export type TextAlignment = 'left' | 'center' | 'right';
+export type ContainerMaxWidth = 'narrow' | 'medium' | 'wide' | 'full';
+export type ContainerPadding = 'small' | 'medium' | 'large';
 
 // 기본값 상수 정의
 export const DEFAULT_BLOCK_WIDTH: BlockWidth = 'contained';
@@ -56,6 +58,47 @@ export const getSpacingClass = (spacing?: Spacing): string => {
     case 'extra-loose': return 'mt-12';
     default: return 'mt-4';
   }
+};
+
+/**
+ * 컨테이너 설정에 따른 CSS 클래스와 인라인 스타일을 반환하는 헬퍼 함수
+ */
+export const getContainerClasses = (design: any): string => {
+  const maxWidth = design?.container_max_width ?? 1280;
+  const padding = design?.container_padding ?? 32;
+  
+  return `mx-auto`;
+};
+
+/**
+ * 컨테이너 설정에 따른 인라인 스타일을 반환하는 헬퍼 함수
+ * 실제 사용 가능한 컨텐츠 영역 기준으로 퍼센트 적용
+ */
+export const getContainerStyles = (design: any, sidebarOpen: boolean = false): React.CSSProperties => {
+  const maxWidthPercent = design?.container_max_width ?? 85;
+  const paddingPercent = design?.container_padding ?? 4;
+  
+  // 사이드바 너비 (20rem = 320px)
+  const sidebarWidth = sidebarOpen ? 20 : 0;
+  
+  // 실제 사용 가능한 컨텐츠 영역의 너비
+  const availableWidth = `calc(100vw - ${sidebarWidth}rem)`;
+  
+  // 컨텐츠 영역 기준 퍼센트 계산
+  const containerWidth = `calc(${availableWidth} * ${maxWidthPercent} / 100)`;
+  const containerPadding = `calc(${availableWidth} * ${paddingPercent} / 100)`;
+  
+  return {
+    width: containerWidth,
+    maxWidth: containerWidth,
+    paddingLeft: containerPadding,
+    paddingRight: containerPadding,
+    position: 'relative',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    marginLeft: 0,
+    marginRight: 0,
+  };
 };
 
 // 블록 타입 정의
@@ -149,6 +192,7 @@ interface InlinePreviewAreaProps {
   storeData?: any; // 상점 데이터 추가
   className?: string;
   readOnly?: boolean; // 읽기 전용 모드 추가
+  sidebarOpen?: boolean; // 사이드바 열림 상태
 }
 
 interface DragState {
@@ -313,7 +357,8 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
   products,
   storeData,
   className = "",
-  readOnly = false
+  readOnly = false,
+  sidebarOpen = false
 }) => {
   const [isClient, setIsClient] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -325,16 +370,20 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
     setIsClient(true);
   }, []);
 
-  // 블록 변환 - 클라이언트 상태를 고려
+  // 블록 변환 - 클라이언트 상태를 고려하고 기본값 적용
   const blocks = useMemo(() => {
-    return convertRowLayoutsToStoreBlocks(design.row_layouts, isClient);
+    const convertedBlocks = convertRowLayoutsToStoreBlocks(design.row_layouts, isClient);
+    // 각 블록에 기본값 적용하여 block_width 등이 항상 설정되도록 보장
+    return convertedBlocks.map(applyDefaultValues);
   }, [design.row_layouts, isClient]);
 
-  // 기존 블록들의 중앙정렬 강제 적용 함수
-  const updateAllBlocksAlignment = useCallback(() => {
+  // 기존 블록들의 기본값 적용 함수
+  const updateAllBlocksDefaults = useCallback(() => {
     const updatedBlocks = blocks.map(block => ({
       ...block,
-      text_alignment: DEFAULT_TEXT_ALIGNMENT
+      text_alignment: block.text_alignment || DEFAULT_TEXT_ALIGNMENT,
+      block_width: block.block_width || DEFAULT_BLOCK_WIDTH,
+      spacing: block.spacing || DEFAULT_SPACING
     }));
     
     const newRowLayouts = convertStoreBlocksToRowLayouts(updatedBlocks);
@@ -344,20 +393,25 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
     });
   }, [blocks, design, onDesignUpdate]);
 
-  // 컴포넌트 마운트 시 중앙정렬 자동 적용
+  // 컴포넌트 마운트 시 기본값 자동 적용
   useEffect(() => {
     if (isClient && blocks.length > 0) {
-      // 중앙정렬이 설정되지 않은 블록이 있는지 확인
-      const needsUpdate = blocks.some(block => !block.text_alignment || block.text_alignment === 'left');
+      // 기본값이 설정되지 않은 블록이 있는지 확인
+      const needsUpdate = blocks.some(block => 
+        !block.text_alignment || 
+        block.text_alignment === 'left' ||
+        !block.block_width ||
+        !block.spacing
+      );
       
       if (needsUpdate) {
         // 0.5초 지연 후 자동 업데이트 (사용자가 눈치채지 못하도록)
         setTimeout(() => {
-          updateAllBlocksAlignment();
+          updateAllBlocksDefaults();
         }, 500);
       }
     }
-  }, [isClient, blocks, updateAllBlocksAlignment]);
+  }, [isClient, blocks, updateAllBlocksDefaults]);
 
   // 드래그 시작 핸들러
   const handleDragStart = useCallback((start: DragStart) => {
@@ -658,15 +712,19 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
       onClick={handleBackgroundClick}
       style={{
         backgroundColor: design.background_color || '#ffffff',
-        fontFamily: design.font_family || 'Inter'
+        fontFamily: design.font_family || 'Inter',
+        // 마진 없음 모드일 때 상단 패딩도 제거
+        paddingTop: design.navbar_margin_mode === 'none' ? '0px' : `${getNavbarMargin()}px`
       }}
     >
 
       <div 
-        className="max-w-6xl mx-auto px-8"
+        className={design.navbar_margin_mode === 'none' ? 'w-full' : 'max-w-6xl mx-auto px-8'}
         style={{
-          paddingTop: `${getNavbarMargin()}px`,
-          paddingBottom: '32px'
+          // 마진 없음 모드가 아닐 때만 컨테이너 패딩 적용
+          ...(design.navbar_margin_mode !== 'none' && {
+            paddingBottom: '32px'
+          })
         }}
       >
         {/* 노션 스타일 블록 타입 선택 메뉴 - 읽기 전용 모드에서는 숨김 */}
@@ -759,7 +817,12 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                 className={`
                   transition-all duration-200
                   ${snapshot.isDraggingOver ? 'bg-gray-50' : ''}
-                  ${blocks.length > 0 ? 'py-8' : ''}
+                  ${
+                    blocks.length > 0 ? (
+                      // 마진 없음 모드에서 첫 번째 블록이 배너인 경우 상단 패딩 제거
+                      design.navbar_margin_mode === 'none' && blocks[0]?.type === 'banner' ? 'pb-20' : 'py-20'
+                    ) : ''
+                  }
                 `}
               >
                 {blocks.length === 0 ? (
@@ -807,11 +870,11 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                 ) : (
                   <>
                     {/* 첫 번째 블록 앞 삽입 영역 - 읽기 전용 모드에서는 숨김 */}
-                    {!readOnly && (
+                    {!readOnly && !(design.navbar_margin_mode === 'none' && blocks[0]?.type === 'banner') && (
                       <div
                         className="relative flex items-center justify-center h-8 group"
                       >
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
                           <button
                             onClick={() => openBlockInsertMenu(0, 'before')}
                             className="
@@ -835,47 +898,60 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                       {blocks.map((block, index) => (
                         <div 
                           key={block.stableId}
-                          className={index > 0 ? getSpacingClass(block.spacing) : ''}
+                          className={
+                            // 마진 없음 모드의 배너 블록인 경우 spacing 제거
+                            design.navbar_margin_mode === 'none' && block.type === 'banner' ? '' :
+                            // 기본 spacing 적용 (첫 번째 블록 제외)
+                            index > 0 ? getSpacingClass(block.spacing) : ''
+                          }
                         >
                           {readOnly ? (
                             // 읽기 전용 모드: 일반 div로 렌더링 (드래그 없음)
                             <div className="relative">
-                              {/* 모든 블록 타입에 대해 full-width 처리 */}
-                              {block.block_width === 'full-width' ? (
-                                <div className="relative -mx-8" style={{ width: 'calc(100% + 4rem)' }}>
-                                  <BasicInlineEditableBlock
-                                    block={block}
-                                    isSelected={selectedBlockId === block.id}
-                                    isDragging={false}
-                                    onSelect={handleBlockSelect}
-                                    onEdit={handleBlockEdit}
-                                    onUpdate={handleBlockUpdate}
-                                    onDelete={handleDeleteBlock}
-                                    onMove={handleMoveBlock}
-                                    onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
-                                    canMoveUp={block.position > 0}
-                                    canMoveDown={block.position < blocks.length - 1}
-                                    products={products}
-                                    readOnly={readOnly}
-                                  />
-                                </div>
-                              ) : (
-                                <BasicInlineEditableBlock
-                                  block={block}
-                                  isSelected={selectedBlockId === block.id}
-                                  isDragging={false}
-                                  onSelect={handleBlockSelect}
-                                  onEdit={handleBlockEdit}
-                                  onUpdate={handleBlockUpdate}
-                                  onDelete={handleDeleteBlock}
-                                  onMove={handleMoveBlock}
-                                  onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
-                                  canMoveUp={block.position > 0}
-                                  canMoveDown={block.position < blocks.length - 1}
-                                  products={products}
-                                  readOnly={readOnly}
-                                />
-                              )}
+                                                      {/* 모든 블록 타입에 대해 full-width 처리 */}
+                        {block.block_width === 'full-width' || (design.navbar_margin_mode === 'none' && block.type === 'banner' && !block.block_width) ? (
+                          <div 
+                            className="relative w-screen left-1/2 -translate-x-1/2"
+                          >
+                            <BasicInlineEditableBlock
+                              block={block}
+                              isSelected={selectedBlockId === block.id}
+                              isDragging={false}
+                              onSelect={handleBlockSelect}
+                              onEdit={handleBlockEdit}
+                              onUpdate={handleBlockUpdate}
+                              onDelete={handleDeleteBlock}
+                              onMove={handleMoveBlock}
+                              onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
+                              canMoveUp={block.position > 0}
+                              canMoveDown={block.position < blocks.length - 1}
+                              products={products}
+                              readOnly={readOnly}
+                              design={design}
+                              sidebarOpen={sidebarOpen}
+                            />
+                          </div>
+                        ) : (
+                          <div className={getContainerClasses(design)} style={getContainerStyles(design, sidebarOpen)}>
+                            <BasicInlineEditableBlock
+                              block={block}
+                              isSelected={selectedBlockId === block.id}
+                              isDragging={false}
+                              onSelect={handleBlockSelect}
+                              onEdit={handleBlockEdit}
+                              onUpdate={handleBlockUpdate}
+                              onDelete={handleDeleteBlock}
+                              onMove={handleMoveBlock}
+                              onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
+                              canMoveUp={block.position > 0}
+                              canMoveDown={block.position < blocks.length - 1}
+                              products={products}
+                              readOnly={readOnly}
+                              design={design}
+                              sidebarOpen={sidebarOpen}
+                            />
+                          </div>
+                        )}
                             </div>
                           ) : (
                             // 편집 모드: Draggable 컴포넌트와 높이 조절 핸들 분리
@@ -906,12 +982,12 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                       }}
                                     >
 
-                                      {/* 드래그 핸들 */}
+                                      {/* 드래그 핸들 - 오른쪽 하단으로 이동 */}
                                       <div 
                                         {...provided.dragHandleProps}
-                                        className="absolute top-2 left-2 w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-move z-30"
+                                        className="absolute bottom-2 right-12 w-6 h-4 opacity-100 hover:opacity-100 transition-all duration-300 cursor-move z-30"
                                       >
-                                        <div className="w-full h-full bg-gray-400 hover:bg-gray-600 rounded-sm flex items-center justify-center">
+                                                                                  <div className="w-full h-full bg-black hover:bg-gray-800 flex items-center justify-center border border-black hover:border-gray-800 transition-all duration-300">
                                           <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
                                           </svg>
@@ -924,8 +1000,10 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                         ${dragState.isDragging && !isDragging ? 'opacity-60' : ''}
                                       `}>
                                         {/* 모든 블록 타입에 대해 full-width 처리 */}
-                                        {block.block_width === 'full-width' ? (
-                                          <div className="relative -mx-8" style={{ width: 'calc(100% + 4rem)' }}>
+                                        {block.block_width === 'full-width' || (design.navbar_margin_mode === 'none' && block.type === 'banner' && !block.block_width) ? (
+                                          <div 
+                                            className="relative w-screen left-1/2 -translate-x-1/2"
+                                          >
                                             <BasicInlineEditableBlock
                                               block={block}
                                               isSelected={selectedBlockId === block.id}
@@ -941,25 +1019,31 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                               products={products}
                                               storeData={storeData}
                                               readOnly={readOnly}
+                                              design={design}
+                                              sidebarOpen={sidebarOpen}
                                             />
                                           </div>
                                         ) : (
-                                          <BasicInlineEditableBlock
-                                            block={block}
-                                            isSelected={selectedBlockId === block.id}
-                                            isDragging={isDragging}
-                                            onSelect={handleBlockSelect}
-                                            onEdit={handleBlockEdit}
-                                            onUpdate={handleBlockUpdate}
-                                            onDelete={handleDeleteBlock}
-                                            onMove={handleMoveBlock}
-                                            onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
-                                            canMoveUp={block.position > 0}
-                                            canMoveDown={block.position < blocks.length - 1}
-                                            products={products}
-                                            storeData={storeData}
-                                            readOnly={readOnly}
-                                          />
+                                          <div className={getContainerClasses(design)} style={getContainerStyles(design, sidebarOpen)}>
+                                            <BasicInlineEditableBlock
+                                              block={block}
+                                              isSelected={selectedBlockId === block.id}
+                                              isDragging={isDragging}
+                                              onSelect={handleBlockSelect}
+                                              onEdit={handleBlockEdit}
+                                              onUpdate={handleBlockUpdate}
+                                              onDelete={handleDeleteBlock}
+                                              onMove={handleMoveBlock}
+                                              onAddBelow={() => openBlockInsertMenu(block.position, 'after')}
+                                              canMoveUp={block.position > 0}
+                                              canMoveDown={block.position < blocks.length - 1}
+                                              products={products}
+                                              storeData={storeData}
+                                              readOnly={readOnly}
+                                              design={design}
+                                              sidebarOpen={sidebarOpen}
+                                            />
+                                          </div>
                                         )}
                                       </div>
                                     </div>
@@ -970,7 +1054,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                               {/* 높이 조절 핸들 - 리스트와 Masonry 블록 제외 */}
                               {!readOnly && !['list', 'masonry'].includes(block.type) && (
                                 <div
-                                  className="absolute bottom-2 right-4 opacity-100 hover:opacity-100 transition-all duration-200 z-50"
+                                  className="absolute bottom-2 right-4 opacity-100 hover:opacity-100 transition-all duration-300 z-50"
                                   style={{ pointerEvents: 'auto' }}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
@@ -1000,7 +1084,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                     document.addEventListener('mouseup', handleMouseUp);
                                   }}
                                 >
-                                  <div className="w-6 h-4 bg-black hover:bg-gray-800 flex items-center justify-center cursor-row-resize transition-all duration-200 border border-black hover:border-gray-800">
+                                  <div className="w-6 h-4 bg-black hover:bg-gray-800 flex items-center justify-center cursor-row-resize transition-all duration-300 border border-black hover:border-gray-800">
                                     <div className="flex space-x-0.5">
                                       <div className="w-0.5 h-0.5 bg-white"></div>
                                       <div className="w-0.5 h-0.5 bg-white"></div>
@@ -1017,7 +1101,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                             <div
                               className="relative flex items-center justify-center h-8 group"
                             >
-                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200">
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
                                 <button
                                   onClick={() => openBlockInsertMenu(index, 'after')}
                                   className="
@@ -1038,6 +1122,31 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                           )}
                         </div>
                       ))}
+                      
+                      {/* 마지막 블록 다음 추가 버튼 - 읽기 전용 모드에서는 숨김 */}
+                      {!readOnly && (
+                        <div className="relative flex items-center justify-center py-8">
+                          <div className="flex items-center justify-center">
+                            <button
+                              onClick={() => openBlockInsertMenu(blocks.length, 'after')}
+                              className="
+                                w-12 h-12 bg-white border-2 border-gray-300 hover:border-gray-500 
+                                flex items-center justify-center text-gray-400 hover:text-gray-600
+                                transition-all duration-200 shadow-lg hover:shadow-xl z-10 relative
+                                rounded-lg hover:bg-gray-50
+                              "
+                              title="새 레이아웃 블록 추가"
+                            >
+                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="absolute top-1/2 left-0 right-0 flex items-center">
+                            <div className="w-full h-px bg-gray-200"></div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1067,6 +1176,8 @@ interface BasicInlineEditableBlockProps {
   products: any[];
   storeData?: any;
   readOnly?: boolean;
+  design?: any; // design 정보 추가
+  sidebarOpen?: boolean; // 사이드바 열림 상태
 }
 
 const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
@@ -1083,7 +1194,9 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
   canMoveDown,
   products,
   storeData,
-  readOnly = false
+  readOnly = false,
+  design,
+  sidebarOpen = false
 }) => {
   // 높이 조절 핸들러
   const handleResize = useCallback((deltaY: number) => {
@@ -1186,7 +1299,7 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
     >
       {/* 블록 조작 툴바 - 읽기 전용 모드가 아니고 드래그 중이 아닐 때만 표시 */}
       {!readOnly && isSelected && !isDragging && (
-        <div className="absolute -top-16 left-0 flex items-center space-x-1 bg-gray-900 text-white px-4 py-2 z-20 shadow-xl">
+        <div className="absolute top-2 left-2 flex items-center space-x-1 bg-gray-900 text-white px-4 py-2 z-20 shadow-xl transition-all duration-300 rounded">
           <span className="text-xs font-light tracking-wider uppercase mr-4">
             {getBlockTypeLabel(block.type)} #{block.position + 1}
           </span>
@@ -1230,7 +1343,7 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
 
       {/* 마우스 오버 힌트 - 읽기 전용이 아니고 드래그 중이 아니고 선택되지 않았을 때만 표시 */}
       {!readOnly && !isSelected && !isDragging && (
-        <div className="absolute -top-8 left-0 px-3 py-1 bg-gray-900 text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <div className="absolute top-2 left-2 px-3 py-1 bg-gray-900 text-white text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 z-10 rounded">
           <span className="font-light tracking-wide">
             {block.type === 'grid' 
               ? 'Drag to reorder • Click to select • Edit in Design Studio' 
@@ -1242,7 +1355,7 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
 
       {/* 드래그 중 표시 - 읽기 전용이 아닐 때만 표시 */}
       {!readOnly && isDragging && (
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 px-4 py-1 bg-gray-900 text-white text-xs z-30 shadow-lg">
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 px-4 py-1 bg-gray-900 text-white text-xs z-30 shadow-lg transition-all duration-300 rounded">
           <div className="flex items-center space-x-2">
             <svg className="w-3 h-3 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" />
@@ -1260,9 +1373,22 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
           ${block.text_alignment === 'center' ? 'text-center' : ''}
           ${block.text_alignment === 'right' ? 'text-right' : ''}
           ${block.text_alignment === 'left' || !block.text_alignment ? 'text-left' : ''}
-          ${block.spacing === 'tight' ? 'py-2' : 
-            block.spacing === 'loose' ? 'py-8' : 
-            block.spacing === 'extra-loose' ? 'py-12' : 'py-4'}
+          ${
+            // 배너 블록 전용 처리
+            block.type === 'banner' ? (
+              // 마진 없음 모드: 패딩 완전 제거
+              design?.navbar_margin_mode === 'none' ? '' : 
+              // 일반 모드: 배너 블록도 기본 spacing 적용
+              block.spacing === 'tight' ? 'py-2' : 
+              block.spacing === 'loose' ? 'py-8' : 
+              block.spacing === 'extra-loose' ? 'py-12' : 'py-4'
+            ) : (
+              // 다른 블록들: 기본 spacing 적용
+              block.spacing === 'tight' ? 'py-2' : 
+              block.spacing === 'loose' ? 'py-8' : 
+              block.spacing === 'extra-loose' ? 'py-12' : 'py-4'
+            )
+          }
         `}
         style={{
           // 텍스트 블록만 부모에서 높이 적용, 다른 블록은 자체 렌더러에서 처리

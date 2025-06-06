@@ -568,18 +568,25 @@ export default function StorePage() {
   const sortedProducts = sortProducts(products, sortBy);
 
   return (
-    <div className="min-h-screen" style={{ 
-      backgroundColor: design.background_color,
-      color: design.text_color,
-      fontFamily: design.font_family 
-    }}>
+    <div 
+      className="min-h-screen" 
+      style={{ 
+        backgroundColor: design.background_color,
+        color: design.text_color,
+        fontFamily: design.font_family,
+        // 마진 없음 모드일 때 상단 패딩 제거
+        paddingTop: design.navbar_margin_mode === 'none' ? '0px' : `${getNavbarMargin()}px`
+      }}
+    >
       {/* 제품 목록 섹션 */}
         {products.length === 0 ? (
         <div 
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+          className={design.navbar_margin_mode === 'none' ? 'w-full px-4 sm:px-6 lg:px-8' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}
           style={{
-            paddingTop: `${getNavbarMargin()}px`,
-            paddingBottom: '48px'
+            // 마진 없음 모드가 아닐 때만 하단 패딩 적용
+            ...(design.navbar_margin_mode !== 'none' && {
+              paddingBottom: '48px'
+            })
           }}
         >
           <div className="text-center py-20">
@@ -606,10 +613,10 @@ export default function StorePage() {
           </div>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className={design.navbar_margin_mode === 'none' ? 'w-full' : 'space-y-8'}>
             {design.enable_custom_rows ? (
             <>
-              <div className="store-preview-readonly">
+              <div className={design.navbar_margin_mode === 'none' ? 'w-full' : 'store-preview-readonly'}>
                 <BasicInlinePreviewArea 
                   storeId={storeId}
                   design={design}
@@ -626,10 +633,12 @@ export default function StorePage() {
             ) : (
               // 기본 레이아웃
             <div 
-              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+              className={design.navbar_margin_mode === 'none' ? 'w-full px-4 sm:px-6 lg:px-8' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}
               style={{
-                paddingTop: `${getNavbarMargin()}px`,
-                paddingBottom: '48px'
+                // 마진 없음 모드가 아닐 때만 하단 패딩 적용
+                ...(design.navbar_margin_mode !== 'none' && {
+                  paddingBottom: '48px'
+                })
               }}
             >
               <>

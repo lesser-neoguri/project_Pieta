@@ -9,6 +9,16 @@ const nextConfig = {
     // 빌드 시 TypeScript 타입 검사를 비활성화
     ignoreBuildErrors: true,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+    ],
+  },
   webpack: (config, { isServer }) => {
     // 클라이언트 사이드에서 Node.js 모듈 fallback 설정
     if (!isServer) {
