@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/contexts/ProfileContext';
+import { usePageStyle } from '@/contexts/PageStyleContext';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect, useLayoutEffect, useCallback } from 'react';
@@ -36,15 +37,18 @@ const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathn
 
 interface NavbarProps {
   storeDesign?: {
-    header_bg_color?: string;
-    header_text_color?: string;
-    header_icon_color?: string;
+    navbar_background_color?: string;
+    navbar_logo_color?: string;
+    navbar_icon_color?: string;
+    navbar_margin_mode?: 'none' | 'navbar-height' | 'custom';
+    custom_navbar_margin?: number;
   };
 }
 
 export default function Navbar({ storeDesign }: NavbarProps = {}) {
   const { user, signOut, isDeletedAccount, deletedAccountInfo } = useAuth();
   const { openProfile } = useProfile();
+  const { pageStyle } = usePageStyle();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [showSearchBar, setShowSearchBar] = useState(false);
@@ -180,26 +184,29 @@ export default function Navbar({ storeDesign }: NavbarProps = {}) {
   // 상점 페이지 여부 확인 (상점 상세 페이지와 디자인 스튜디오 페이지)
   const isStorePage = pathname?.startsWith('/store/') && !pathname?.includes('/product/');
 
-  // 상점 디자인 정보 가져오기
+  // 상점 디자인 정보 가져오기 및 실시간 업데이트 수신
   useEffect(() => {
     const fetchStoreDesign = async () => {
       if (isStorePage && mounted) {
         try {
           const storeIdMatch = pathname?.match(/\/store\/([^\/]+)/);
+          
           if (storeIdMatch) {
             const storeId = storeIdMatch[1];
-            const { data: designData } = await supabase
+            
+            const { data: designData, error } = await supabase
               .from('store_designs')
-              .select('header_bg_color, header_text_color, header_icon_color')
+              .select('navbar_background_color, navbar_logo_color, navbar_icon_color')
               .eq('store_id', storeId)
               .single();
             
             if (designData) {
-              setCurrentStoreDesign({
-                header_bg_color: designData.header_bg_color,
-                header_text_color: designData.header_text_color,
-                header_icon_color: designData.header_icon_color
-              });
+              const newDesign = {
+                navbar_background_color: designData.navbar_background_color,
+                navbar_logo_color: designData.navbar_logo_color,
+                navbar_icon_color: designData.navbar_icon_color
+              };
+              setCurrentStoreDesign(newDesign);
             }
           }
         } catch (error) {
@@ -212,6 +219,21 @@ export default function Navbar({ storeDesign }: NavbarProps = {}) {
 
     fetchStoreDesign();
   }, [pathname, mounted, isStorePage]);
+
+  // 실시간 디자인 변경사항 수신
+  useEffect(() => {
+    const handleDesignChange = (event: CustomEvent) => {
+      if (isStorePage) {
+        setCurrentStoreDesign(event.detail);
+      }
+    };
+
+    window.addEventListener('storeDesignChange', handleDesignChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('storeDesignChange', handleDesignChange as EventListener);
+    };
+  }, [isStorePage]);
   
   // 투명 배경이 필요한 페이지 여부
   const needsTransparentBg = isHomePage || isStorePage;
@@ -222,30 +244,58 @@ export default function Navbar({ storeDesign }: NavbarProps = {}) {
   // 투자 페이지에서는 로고 텍스트를 변경
   const isInvestmentPage = pathname?.startsWith('/investment');
 
-  // 상점 디자인 설정 적용 (우선순위: prop > 자동로드 > 기본값)
+  // 상점 디자인 설정 적용 (우선순위: PageStyleContext > storeDesign > 자동로드 > 기본값)
   const activeStoreDesign = storeDesign || currentStoreDesign;
   
   const getNavbarStyles = () => {
-    if (isStorePage && activeStoreDesign) {
+    // PageStyleContext가 최우선
+    if (pageStyle.backgroundColor !== undefined) {
       return {
-        backgroundColor: activeStoreDesign.header_bg_color === 'transparent' ? 'transparent' : activeStoreDesign.header_bg_color || 'transparent',
-        color: activeStoreDesign.header_text_color || '#ffffff'
+        backgroundColor: pageStyle.backgroundColor,
+        color: pageStyle.logoColor || '#ffffff'
       };
     }
+    
+    // 상점 페이지 디자인이 두 번째 우선순위
+    if (isStorePage && activeStoreDesign) {
+      // RGBA 투명 배경 처리
+      const bgColor = activeStoreDesign.navbar_background_color;
+      const isTransparent = bgColor === 'transparent' || bgColor === 'rgba(255, 255, 255, 0)' || bgColor?.includes('rgba') && bgColor.includes(', 0)');
+      
+      return {
+        backgroundColor: isTransparent ? 'transparent' : bgColor || 'transparent',
+        color: activeStoreDesign.navbar_logo_color || '#ffffff'
+      };
+    }
+    
     return {};
   };
 
   const getIconColor = () => {
-    if (isStorePage && activeStoreDesign?.header_icon_color) {
-      return activeStoreDesign.header_icon_color;
+    // PageStyleContext가 최우선
+    if (pageStyle.iconColor !== undefined) {
+      return pageStyle.iconColor;
     }
+    
+    // 상점 페이지 디자인이 두 번째 우선순위
+    if (isStorePage && activeStoreDesign?.navbar_icon_color) {
+      return activeStoreDesign.navbar_icon_color;
+    }
+    
     return needsTransparentBg ? '#ffffff' : needsTransparentWithDarkIcons ? '#374151' : '#374151';
   };
 
   const getTextColor = () => {
-    if (isStorePage && activeStoreDesign?.header_text_color) {
-      return activeStoreDesign.header_text_color;
+    // PageStyleContext가 최우선
+    if (pageStyle.logoColor !== undefined) {
+      return pageStyle.logoColor;
     }
+    
+    // 상점 페이지 디자인이 두 번째 우선순위
+    if (isStorePage && activeStoreDesign?.navbar_logo_color) {
+      return activeStoreDesign.navbar_logo_color;
+    }
+    
     return needsTransparentBg ? '#ffffff' : needsTransparentWithDarkIcons ? '#1f2937' : '#1f2937';
   };
   

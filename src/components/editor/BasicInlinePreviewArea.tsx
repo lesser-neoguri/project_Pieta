@@ -638,6 +638,20 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
     );
   }
 
+  // 네비게이션 바 마진 계산
+  const getNavbarMargin = () => {
+    if (!design.navbar_margin_mode || design.navbar_margin_mode === 'navbar-height') {
+      return 64; // 기본 네비게이션 바 높이
+    }
+    if (design.navbar_margin_mode === 'none') {
+      return 0;
+    }
+    if (design.navbar_margin_mode === 'custom') {
+      return design.custom_navbar_margin || 64;
+    }
+    return 64;
+  };
+
   return (
     <div 
       className={`${className} min-h-screen`}
@@ -648,7 +662,13 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
       }}
     >
 
-      <div className="max-w-6xl mx-auto px-8 py-8">
+      <div 
+        className="max-w-6xl mx-auto px-8"
+        style={{
+          paddingTop: `${getNavbarMargin()}px`,
+          paddingBottom: '32px'
+        }}
+      >
         {/* 노션 스타일 블록 타입 선택 메뉴 - 읽기 전용 모드에서는 숨김 */}
         {!readOnly && insertMenu.isVisible && (
           <div className="fixed inset-0 z-50" onClick={closeBlockInsertMenu}>

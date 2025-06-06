@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePageStyle } from '@/contexts/PageStyleContext';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { extractPathFromUrl } from '@/lib/migration';
@@ -119,6 +120,13 @@ type StoreDesign = {
   enable_custom_rows?: boolean;
   // 상품 간격 설정 추가
   product_spacing?: 'none' | 'tight' | 'normal' | 'loose' | 'extra-loose';
+  // 헤더 네비게이션 색상 설정 (RGBA 지원)
+  navbar_background_color?: string;
+  navbar_icon_color?: string;
+  navbar_logo_color?: string;
+  // 네비게이션 바와 콘텐츠 사이의 마진 설정
+  navbar_margin_mode?: 'none' | 'navbar-height' | 'custom';
+  custom_navbar_margin?: number; // 커스텀 마진 (픽셀 단위)
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -158,6 +166,7 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
 
 export default function StorePage() {
   const { user } = useAuth();
+  const { setPageStyle, clearPageStyle } = usePageStyle();
   const params = useParams();
   const router = useRouter();
   const storeId = params?.id as string;
@@ -301,6 +310,15 @@ export default function StorePage() {
           console.log('Final row_layouts:', convertedDesign.row_layouts);
           console.log('=== 디버깅 종료 ===');
           setDesign(convertedDesign);
+          
+          // PageStyleContext에 네비게이션 스타일 적용
+          if (convertedDesign.navbar_background_color || convertedDesign.navbar_icon_color || convertedDesign.navbar_logo_color) {
+            setPageStyle({
+              backgroundColor: convertedDesign.navbar_background_color,
+              iconColor: convertedDesign.navbar_icon_color,
+              logoColor: convertedDesign.navbar_logo_color,
+            });
+          }
         } else {
           console.log('No design data found, using default design');
           setDesign({ ...defaultDesign, store_id: storeId });
@@ -334,6 +352,13 @@ export default function StorePage() {
 
     fetchStoreAndProducts();
   }, [storeId, user]);
+
+  // 컴포넌트 언마운트 시 PageStyle 정리
+  useEffect(() => {
+    return () => {
+      clearPageStyle();
+    };
+  }, [clearPageStyle]);
 
   // 팝업 외부 클릭 시 닫기
   useEffect(() => {
@@ -493,6 +518,20 @@ export default function StorePage() {
     }
   };
 
+  // 네비게이션 바 마진 계산
+  const getNavbarMargin = () => {
+    if (!design.navbar_margin_mode || design.navbar_margin_mode === 'navbar-height') {
+      return 64; // 기본 네비게이션 바 높이
+    }
+    if (design.navbar_margin_mode === 'none') {
+      return 0;
+    }
+    if (design.navbar_margin_mode === 'custom') {
+      return design.custom_navbar_margin || 64;
+    }
+    return 64;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -536,7 +575,13 @@ export default function StorePage() {
     }}>
       {/* 제품 목록 섹션 */}
         {products.length === 0 ? (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div 
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+          style={{
+            paddingTop: `${getNavbarMargin()}px`,
+            paddingBottom: '48px'
+          }}
+        >
           <div className="text-center py-20">
             <div className="w-16 h-16 mx-auto mb-6 text-gray-300">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" className="w-full h-full">
@@ -580,7 +625,13 @@ export default function StorePage() {
             </>
             ) : (
               // 기본 레이아웃
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div 
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+              style={{
+                paddingTop: `${getNavbarMargin()}px`,
+                paddingBottom: '48px'
+              }}
+            >
               <>
                 <div className={`grid ${getProductSpacing()}`}
                      style={{

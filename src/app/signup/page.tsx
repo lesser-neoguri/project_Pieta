@@ -31,7 +31,7 @@ export default function SignupPage() {
         </div>
       </header>
 
-      <main className="pt-32 pb-20 px-4 max-w-md mx-auto">
+      <main className="pt-40 pb-20 px-4 max-w-md mx-auto">
         <div className="space-y-3">
           <Link 
             href="/signup/regular" 

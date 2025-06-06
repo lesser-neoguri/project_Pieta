@@ -13,7 +13,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white -mt-16 sm:-mt-20 md:-mt-24">
+    <div className="min-h-screen bg-white">
       {/* Hero Section - 여백 없이 전체 너비 사용 */}
       <div className="h-screen w-full relative overflow-hidden">
         {/* Background Video */}

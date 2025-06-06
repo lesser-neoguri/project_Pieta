@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProfileProvider } from '@/contexts/ProfileContext';
 import { ErrorProvider } from '@/contexts/ErrorContext';
+import { PageStyleProvider } from '@/contexts/PageStyleContext';
 import ProfileSidebar from '@/components/ProfileSidebar';
 import Navbar from "@/components/Navbar";
 
@@ -44,9 +45,11 @@ export default function RootLayout({
         <ErrorProvider>
         <AuthProvider>
           <ProfileProvider>
-            <Navbar />
-            <main className="pt-16 sm:pt-20 md:pt-24">{children}</main>
-            <ProfileSidebar />
+            <PageStyleProvider>
+              <Navbar />
+              <main>{children}</main>
+              <ProfileSidebar />
+            </PageStyleProvider>
           </ProfileProvider>
         </AuthProvider>
         </ErrorProvider>

@@ -55,10 +55,13 @@ type StoreDesign = {
   description_font_size: 'small' | 'medium' | 'large';
   enable_custom_rows?: boolean;
   row_layouts?: any;
-  // 헤더 네비게이션 색상 설정
-  header_bg_color?: string;
-  header_text_color?: string; // PIETA 폰트 색상
-  header_icon_color?: string; // 아이콘 색상
+  // 헤더 네비게이션 색상 설정 (RGBA 지원)
+  navbar_background_color?: string;
+  navbar_icon_color?: string;
+  navbar_logo_color?: string;
+  // 네비게이션 바와 콘텐츠 사이의 마진 설정
+  navbar_margin_mode?: 'none' | 'navbar-height' | 'custom';
+  custom_navbar_margin?: number; // 커스텀 마진 (픽셀 단위)
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -78,10 +81,13 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
   title_font_size: 'large',
   description_font_size: 'medium',
   enable_custom_rows: false,
-  // 헤더 네비게이션 기본 색상 (투명)
-  header_bg_color: 'transparent',
-  header_text_color: '#ffffff',
-  header_icon_color: '#ffffff'
+  // 헤더 네비게이션 기본 색상 (RGBA 지원)
+  navbar_background_color: 'rgba(255, 255, 255, 0)', // 투명 배경
+  navbar_icon_color: '#FFFFFF',
+  navbar_logo_color: '#FFFFFF',
+  // 네비게이션 바 마진 기본값
+  navbar_margin_mode: 'navbar-height', // 기본적으로 nav 바 높이만큼 마진
+  custom_navbar_margin: 64 // 기본 64px
 };
 
 export default function StoreDesignForm({ storeId }: { storeId: string }) {
@@ -212,7 +218,22 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
   };
 
   const updateDesign = (field: keyof StoreDesign, value: any) => {
-    setDesign(prev => ({ ...prev, [field]: value }));
+    const newDesign = { ...design, [field]: value };
+    setDesign(newDesign);
+    
+    // 헤더 네비게이션 및 마진 관련 변경사항을 즉시 Navbar에 반영
+    if (field === 'navbar_background_color' || field === 'navbar_logo_color' || field === 'navbar_icon_color' || field === 'navbar_margin_mode' || field === 'custom_navbar_margin') {
+      // 커스텀 이벤트를 통해 Navbar에 변경사항 전달
+      window.dispatchEvent(new CustomEvent('storeDesignChange', {
+        detail: {
+          navbar_background_color: field === 'navbar_background_color' ? value : design.navbar_background_color,
+          navbar_logo_color: field === 'navbar_logo_color' ? value : design.navbar_logo_color,
+          navbar_icon_color: field === 'navbar_icon_color' ? value : design.navbar_icon_color,
+          navbar_margin_mode: field === 'navbar_margin_mode' ? value : design.navbar_margin_mode,
+          custom_navbar_margin: field === 'custom_navbar_margin' ? value : design.custom_navbar_margin
+        }
+      }));
+    }
   };
 
   const handleSelectedBlockChange = useCallback((block: StoreBlock | null) => {
@@ -886,67 +907,299 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          헤더 배경 색상
+                          Navigation Background
                         </label>
-                        <div className="flex items-center space-x-2">
+                        
+                        {/* 색상 선택기와 텍스트 입력 */}
+                        <div className="flex items-center space-x-2 mb-3">
                           <input
                             type="color"
-                            value={design.header_bg_color || 'transparent'}
-                            onChange={(e) => updateDesign('header_bg_color', e.target.value)}
+                            value={(() => {
+                              const color = design.navbar_background_color;
+                              if (!color || color === 'rgba(255, 255, 255, 0)') return '#ffffff';
+                              if (color.startsWith('#')) return color;
+                              if (color.startsWith('rgba')) {
+                                const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                if (match) {
+                                  const [, r, g, b] = match;
+                                  return `#${parseInt(r).toString(16).padStart(2, '0')}${parseInt(g).toString(16).padStart(2, '0')}${parseInt(b).toString(16).padStart(2, '0')}`;
+                                }
+                              }
+                              return '#ffffff';
+                            })()}
+                            onChange={(e) => {
+                              const hexColor = e.target.value;
+                              const r = parseInt(hexColor.slice(1, 3), 16);
+                              const g = parseInt(hexColor.slice(3, 5), 16);
+                              const b = parseInt(hexColor.slice(5, 7), 16);
+                              
+                              // 현재 알파값 유지하거나 기본값 1 사용
+                              let alpha = 1;
+                              const currentColor = design.navbar_background_color;
+                              if (currentColor && currentColor.startsWith('rgba')) {
+                                const match = currentColor.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                                if (match) alpha = parseFloat(match[1]);
+                              }
+                              
+                              updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                            }}
                             className="w-8 h-8 border border-gray-200 cursor-pointer"
                           />
                           <input
                             type="text"
-                            value={design.header_bg_color || 'transparent'}
-                            onChange={(e) => updateDesign('header_bg_color', e.target.value)}
+                            value={design.navbar_background_color || 'rgba(255, 255, 255, 0)'}
+                            onChange={(e) => updateDesign('navbar_background_color', e.target.value)}
                             className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-                            placeholder="transparent, #ffffff 등"
+                            placeholder="rgba(255, 255, 255, 0), #ffffff 등"
                           />
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          'transparent'로 설정하면 투명 배경이 됩니다.
+                        
+                        {/* 투명도 슬라이더 */}
+                        <div className="mb-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-gray-600 uppercase tracking-wide">
+                              투명도 (Alpha)
+                            </label>
+                            <span className="text-xs text-gray-500">
+                              {(() => {
+                                const color = design.navbar_background_color;
+                                if (!color || color === 'rgba(255, 255, 255, 0)') return '0%';
+                                if (color.startsWith('rgba')) {
+                                  const match = color.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                                  if (match) return `${Math.round(parseFloat(match[1]) * 100)}%`;
+                                }
+                                return '100%';
+                              })()}
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            value={(() => {
+                              const color = design.navbar_background_color;
+                              if (!color || color === 'rgba(255, 255, 255, 0)') return 0;
+                              if (color.startsWith('rgba')) {
+                                const match = color.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                                if (match) return parseFloat(match[1]);
+                              }
+                              return 1;
+                            })()}
+                            onChange={(e) => {
+                              const alpha = parseFloat(e.target.value);
+                              const color = design.navbar_background_color;
+                              
+                              let r = 255, g = 255, b = 255;
+                              
+                              if (color && color.startsWith('rgba')) {
+                                const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                if (match) {
+                                  r = parseInt(match[1]);
+                                  g = parseInt(match[2]);
+                                  b = parseInt(match[3]);
+                                }
+                              } else if (color && color.startsWith('#')) {
+                                r = parseInt(color.slice(1, 3), 16);
+                                g = parseInt(color.slice(3, 5), 16);
+                                b = parseInt(color.slice(5, 7), 16);
+                              }
+                              
+                              updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                            }}
+                            className="w-full h-3 appearance-none cursor-pointer alpha-slider rounded-lg"
+                            style={{
+                              background: `
+                                linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                                linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                                linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                                linear-gradient(-45deg, transparent 75%, #ccc 75%),
+                                linear-gradient(to right, 
+                                  rgba(${(() => {
+                                    const color = design.navbar_background_color;
+                                    if (color && color.startsWith('rgba')) {
+                                      const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                      if (match) {
+                                        const [, r, g, b] = match;
+                                        return `${r}, ${g}, ${b}`;
+                                      }
+                                    }
+                                    return '255, 255, 255';
+                                  })()}, 0) 0%, 
+                                  rgba(${(() => {
+                                    const color = design.navbar_background_color;
+                                    if (color && color.startsWith('rgba')) {
+                                      const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                      if (match) {
+                                        const [, r, g, b] = match;
+                                        return `${r}, ${g}, ${b}`;
+                                      }
+                                    }
+                                    return '255, 255, 255';
+                                  })()}, 1) 100%)
+                              `,
+                              backgroundSize: '8px 8px, 8px 8px, 8px 8px, 8px 8px, 100% 100%',
+                              backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px, 0 0'
+                            }}
+                          />
+                        </div>
+                        
+                        {/* 빠른 투명도 프리셋 */}
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-gray-600 uppercase tracking-wide">빠른 설정:</span>
+                          <div className="flex space-x-1">
+                            {[
+                              { label: '투명', value: 0 },
+                              { label: '반투명', value: 0.5 },
+                              { label: '불투명', value: 1 }
+                            ].map((preset) => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => {
+                                  const alpha = preset.value;
+                                  const color = design.navbar_background_color;
+                                  
+                                  let r = 255, g = 255, b = 255;
+                                  
+                                  if (color && color.startsWith('rgba')) {
+                                    const match = color.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/);
+                                    if (match) {
+                                      r = parseInt(match[1]);
+                                      g = parseInt(match[2]);
+                                      b = parseInt(match[3]);
+                                    }
+                                  } else if (color && color.startsWith('#')) {
+                                    r = parseInt(color.slice(1, 3), 16);
+                                    g = parseInt(color.slice(3, 5), 16);
+                                    b = parseInt(color.slice(5, 7), 16);
+                                  }
+                                  
+                                  updateDesign('navbar_background_color', `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                                }}
+                                className="px-2 py-1 text-xs border border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-colors rounded"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <p className="text-xs text-gray-500 mt-2">
+                          투명도 0%는 완전 투명, 100%는 완전 불투명입니다.
                         </p>
                       </div>
 
                       <div>
                         <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          PIETA 로고 색상
+                          PIETA Logo Color
                         </label>
                         <div className="flex items-center space-x-2">
                           <input
                             type="color"
-                            value={design.header_text_color || '#ffffff'}
-                            onChange={(e) => updateDesign('header_text_color', e.target.value)}
+                            value={design.navbar_logo_color || '#ffffff'}
+                            onChange={(e) => updateDesign('navbar_logo_color', e.target.value)}
                             className="w-8 h-8 border border-gray-200 cursor-pointer"
                           />
                           <input
                             type="text"
-                            value={design.header_text_color || '#ffffff'}
-                            onChange={(e) => updateDesign('header_text_color', e.target.value)}
+                            value={design.navbar_logo_color || '#ffffff'}
+                            onChange={(e) => updateDesign('navbar_logo_color', e.target.value)}
                             className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            placeholder="#ffffff, rgba(255, 255, 255, 1) 등"
                           />
                         </div>
                       </div>
 
                       <div>
                         <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                          아이콘 색상
+                          Icon Colors
                         </label>
                         <div className="flex items-center space-x-2">
                           <input
                             type="color"
-                            value={design.header_icon_color || '#ffffff'}
-                            onChange={(e) => updateDesign('header_icon_color', e.target.value)}
+                            value={design.navbar_icon_color || '#ffffff'}
+                            onChange={(e) => updateDesign('navbar_icon_color', e.target.value)}
                             className="w-8 h-8 border border-gray-200 cursor-pointer"
                           />
                           <input
                             type="text"
-                            value={design.header_icon_color || '#ffffff'}
-                            onChange={(e) => updateDesign('header_icon_color', e.target.value)}
+                            value={design.navbar_icon_color || '#ffffff'}
+                            onChange={(e) => updateDesign('navbar_icon_color', e.target.value)}
                             className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            placeholder="#ffffff, rgba(255, 255, 255, 1) 등"
                           />
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* 네비게이션 바 마진 설정 */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
+                      Navigation Margin
+                    </h3>
+                    
+                    <div className="bg-blue-50 border border-blue-200 p-3 mb-4">
+                      <div className="flex items-start space-x-2">
+                        <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <h4 className="text-xs font-medium text-blue-900 mb-1">네비게이션 바와 콘텐츠 간격</h4>
+                          <p className="text-xs text-blue-700 leading-relaxed">
+                            네비게이션 바 아래쪽과 페이지 콘텐츠 사이의 마진을 설정합니다.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                          마진 모드
+                        </label>
+                        <select
+                          value={design.navbar_margin_mode || 'navbar-height'}
+                          onChange={(e) => updateDesign('navbar_margin_mode', e.target.value)}
+                          className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                        >
+                          <option value="none">마진 없음 (네비게이션 바에 붙임)</option>
+                          <option value="navbar-height">네비게이션 바 높이만큼 (기본)</option>
+                          <option value="custom">커스텀 마진</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          "마진 없음"을 선택하면 첫 번째 콘텐츠가 네비게이션 바 바로 아래에 붙습니다.
+                        </p>
+                      </div>
+
+                      {design.navbar_margin_mode === 'custom' && (
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                            커스텀 마진 (픽셀)
+                          </label>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="200"
+                              step="4"
+                              value={design.custom_navbar_margin || 64}
+                              onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value))}
+                              className="flex-1"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              max="500"
+                              value={design.custom_navbar_margin || 64}
+                              onChange={(e) => updateDesign('custom_navbar_margin', parseInt(e.target.value) || 0)}
+                              className="w-16 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none text-center"
+                            />
+                            <span className="text-xs text-gray-500">px</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1274,6 +1527,50 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           background: #1f2937;
           transform: scale(1.1);
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 알파 슬라이더 스타일 */
+        :global(.alpha-slider) {
+          -webkit-appearance: none;
+          appearance: none;
+          outline: none;
+          border: 1px solid #d1d5db;
+        }
+        
+        :global(.alpha-slider::-webkit-slider-thumb) {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          border: 2px solid #374151;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          transition: all 0.2s ease;
+        }
+        
+        :global(.alpha-slider::-webkit-slider-thumb:hover) {
+          border-color: #1f2937;
+          transform: scale(1.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+        
+        :global(.alpha-slider::-moz-range-thumb) {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          border: 2px solid #374151;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          transition: all 0.2s ease;
+        }
+        
+        :global(.alpha-slider::-moz-range-thumb:hover) {
+          border-color: #1f2937;
+          transform: scale(1.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
         }
         
         /* contained 블록은 적절한 컨테이너와 패딩 유지 */
