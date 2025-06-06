@@ -45,7 +45,7 @@ export default function RootLayout({
         <AuthProvider>
           <ProfileProvider>
             <Navbar />
-            <main>{children}</main>
+            <main className="pt-16 sm:pt-20 md:pt-24">{children}</main>
             <ProfileSidebar />
           </ProfileProvider>
         </AuthProvider>

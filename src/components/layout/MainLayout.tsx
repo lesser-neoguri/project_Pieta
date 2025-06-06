@@ -10,11 +10,8 @@ export default function MainLayout({
   children, 
   centered = true 
 }: MainLayoutProps) {
-  // 네비게이션 바 고정에 따른 상단 여백 추가를 위한 클래스
-  const navbarHeight = "mt-16 sm:mt-20 md:mt-24"; // 네비게이션 바 높이에 맞게 마진 설정
-
   return (
-    <div className={`min-h-screen flex flex-col bg-white custom-scrollbar-vertical ${navbarHeight}`}>
+    <div className={`min-h-screen flex flex-col bg-white custom-scrollbar-vertical`}>
       <main className={`flex-1 ${centered ? 'flex items-center justify-center' : ''} px-4 py-6`}>
         {children}
       </main>
