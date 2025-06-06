@@ -55,6 +55,10 @@ type StoreDesign = {
   description_font_size: 'small' | 'medium' | 'large';
   enable_custom_rows?: boolean;
   row_layouts?: any;
+  // 헤더 네비게이션 색상 설정
+  header_bg_color?: string;
+  header_text_color?: string; // PIETA 폰트 색상
+  header_icon_color?: string; // 아이콘 색상
 };
 
 const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
@@ -73,7 +77,11 @@ const defaultDesign: Omit<StoreDesign, 'id' | 'store_id'> = {
   logo_position: 'center',
   title_font_size: 'large',
   description_font_size: 'medium',
-  enable_custom_rows: false
+  enable_custom_rows: false,
+  // 헤더 네비게이션 기본 색상 (투명)
+  header_bg_color: 'transparent',
+  header_text_color: '#ffffff',
+  header_icon_color: '#ffffff'
 };
 
 export default function StoreDesignForm({ storeId }: { storeId: string }) {
@@ -848,6 +856,93 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                             type="text"
                             value={design.text_color || '#000000'}
                             onChange={(e) => updateDesign('text_color', e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 헤더 네비게이션 색상 설정 */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide border-b border-gray-200 pb-2">
+                      Header Navigation
+                    </h3>
+                    
+                    <div className="bg-yellow-50 border border-yellow-200 p-3 mb-4">
+                      <div className="flex items-start space-x-2">
+                        <svg className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <h4 className="text-xs font-medium text-yellow-900 mb-1">네비게이션 색상 설정</h4>
+                          <p className="text-xs text-yellow-700 leading-relaxed">
+                            PIETA 로고 폰트는 고정되며, 배경색과 아이콘 색상만 변경 가능합니다.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                          헤더 배경 색상
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="color"
+                            value={design.header_bg_color || 'transparent'}
+                            onChange={(e) => updateDesign('header_bg_color', e.target.value)}
+                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={design.header_bg_color || 'transparent'}
+                            onChange={(e) => updateDesign('header_bg_color', e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                            placeholder="transparent, #ffffff 등"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          'transparent'로 설정하면 투명 배경이 됩니다.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                          PIETA 로고 색상
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="color"
+                            value={design.header_text_color || '#ffffff'}
+                            onChange={(e) => updateDesign('header_text_color', e.target.value)}
+                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={design.header_text_color || '#ffffff'}
+                            onChange={(e) => updateDesign('header_text_color', e.target.value)}
+                            className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                          아이콘 색상
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="color"
+                            value={design.header_icon_color || '#ffffff'}
+                            onChange={(e) => updateDesign('header_icon_color', e.target.value)}
+                            className="w-8 h-8 border border-gray-200 cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={design.header_icon_color || '#ffffff'}
+                            onChange={(e) => updateDesign('header_icon_color', e.target.value)}
                             className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
                           />
                         </div>

@@ -34,7 +34,15 @@ const Banner = dynamic(() => Promise.resolve(({ showBanner, setShowBanner, pathn
   return null;
 }), { ssr: false });
 
-export default function Navbar() {
+interface NavbarProps {
+  storeDesign?: {
+    header_bg_color?: string;
+    header_text_color?: string;
+    header_icon_color?: string;
+  };
+}
+
+export default function Navbar({ storeDesign }: NavbarProps = {}) {
   const { user, signOut, isDeletedAccount, deletedAccountInfo } = useAuth();
   const { openProfile } = useProfile();
   const pathname = usePathname();
@@ -57,6 +65,9 @@ export default function Navbar() {
   
   // 네비게이션 바 표시 여부 상태
   const [isNavVisible, setIsNavVisible] = useState(true);
+  
+  // 상점 디자인 상태
+  const [currentStoreDesign, setCurrentStoreDesign] = useState<NavbarProps['storeDesign']>(null);
   
   // 특정 페이지에서 아이콘 색상 결정
   const isProductDetailPage = pathname?.includes('/store/') && pathname?.includes('/product/');
@@ -168,6 +179,39 @@ export default function Navbar() {
   
   // 상점 페이지 여부 확인 (상점 상세 페이지와 디자인 스튜디오 페이지)
   const isStorePage = pathname?.startsWith('/store/') && !pathname?.includes('/product/');
+
+  // 상점 디자인 정보 가져오기
+  useEffect(() => {
+    const fetchStoreDesign = async () => {
+      if (isStorePage && mounted) {
+        try {
+          const storeIdMatch = pathname?.match(/\/store\/([^\/]+)/);
+          if (storeIdMatch) {
+            const storeId = storeIdMatch[1];
+            const { data: designData } = await supabase
+              .from('store_designs')
+              .select('header_bg_color, header_text_color, header_icon_color')
+              .eq('store_id', storeId)
+              .single();
+            
+            if (designData) {
+              setCurrentStoreDesign({
+                header_bg_color: designData.header_bg_color,
+                header_text_color: designData.header_text_color,
+                header_icon_color: designData.header_icon_color
+              });
+            }
+          }
+        } catch (error) {
+          console.error('상점 디자인 정보 로드 실패:', error);
+        }
+      } else {
+        setCurrentStoreDesign(null);
+      }
+    };
+
+    fetchStoreDesign();
+  }, [pathname, mounted, isStorePage]);
   
   // 투명 배경이 필요한 페이지 여부
   const needsTransparentBg = isHomePage || isStorePage;
@@ -177,6 +221,33 @@ export default function Navbar() {
   
   // 투자 페이지에서는 로고 텍스트를 변경
   const isInvestmentPage = pathname?.startsWith('/investment');
+
+  // 상점 디자인 설정 적용 (우선순위: prop > 자동로드 > 기본값)
+  const activeStoreDesign = storeDesign || currentStoreDesign;
+  
+  const getNavbarStyles = () => {
+    if (isStorePage && activeStoreDesign) {
+      return {
+        backgroundColor: activeStoreDesign.header_bg_color === 'transparent' ? 'transparent' : activeStoreDesign.header_bg_color || 'transparent',
+        color: activeStoreDesign.header_text_color || '#ffffff'
+      };
+    }
+    return {};
+  };
+
+  const getIconColor = () => {
+    if (isStorePage && activeStoreDesign?.header_icon_color) {
+      return activeStoreDesign.header_icon_color;
+    }
+    return needsTransparentBg ? '#ffffff' : needsTransparentWithDarkIcons ? '#374151' : '#374151';
+  };
+
+  const getTextColor = () => {
+    if (isStorePage && activeStoreDesign?.header_text_color) {
+      return activeStoreDesign.header_text_color;
+    }
+    return needsTransparentBg ? '#ffffff' : needsTransparentWithDarkIcons ? '#1f2937' : '#1f2937';
+  };
   
   if (!mounted) {
     return null;
@@ -189,7 +260,16 @@ export default function Navbar() {
       <nav 
         className={`fixed top-0 left-0 right-0 z-40 transition-transform duration-300 ${
           isNavVisible ? 'translate-y-0' : '-translate-y-full'
-        } ${needsTransparentBg ? 'md:bg-transparent bg-white' : needsTransparentWithDarkIcons ? 'md:bg-transparent bg-white' : 'bg-white'} md:shadow-none shadow-md`}
+        } ${
+          isStorePage && activeStoreDesign 
+            ? '' // 커스텀 스타일 사용
+            : needsTransparentBg 
+            ? 'md:bg-transparent bg-white' 
+            : needsTransparentWithDarkIcons 
+            ? 'md:bg-transparent bg-white' 
+            : 'bg-white'
+        } md:shadow-none shadow-md`}
+        style={getNavbarStyles()}
       >
         <div className="max-w-8xl mx-auto px-1 sm:px-6 lg:px-10">
           <div className="flex justify-between h-16 sm:h-20 md:h-24 py-2 sm:py-3 md:py-4">
@@ -198,7 +278,16 @@ export default function Navbar() {
               {/* 햄버거 메뉴 아이콘 */}
               <button 
                 onClick={() => setShowSideMenu(!showSideMenu)}
-                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                  isStorePage && activeStoreDesign 
+                    ? 'hover:bg-black/10' 
+                    : needsTransparentBg 
+                    ? 'hover:bg-white/20 text-white' 
+                    : needsTransparentWithDarkIcons 
+                    ? 'hover:bg-gray-100 text-gray-600' 
+                    : 'hover:bg-gray-100 text-gray-600'
+                }`}
+                style={{ color: getIconColor() }}
                 aria-label="메뉴"
                 title="메뉴"
               >
@@ -210,7 +299,16 @@ export default function Navbar() {
               {/* 검색 아이콘 */}
               <button 
                 onClick={() => setShowSearchBar(!showSearchBar)}
-                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                  isStorePage && activeStoreDesign 
+                    ? 'hover:bg-black/10' 
+                    : needsTransparentBg 
+                    ? 'hover:bg-white/20 text-white' 
+                    : needsTransparentWithDarkIcons 
+                    ? 'hover:bg-gray-100 text-gray-600' 
+                    : 'hover:bg-gray-100 text-gray-600'
+                }`}
+                style={{ color: getIconColor() }}
                 aria-label="검색"
                 title="검색"
               >
@@ -222,7 +320,19 @@ export default function Navbar() {
             
             {/* 로고 (중앙 정렬) */}
             <div className="flex items-center justify-center w-1/3">
-              <Link href="/" className={`font-bold ${needsTransparentBg ? 'text-white' : needsTransparentWithDarkIcons ? 'text-gray-800' : 'text-gray-800'} -mt`}>
+              <Link 
+                href="/" 
+                className={`font-bold -mt ${
+                  isStorePage && activeStoreDesign 
+                    ? '' 
+                    : needsTransparentBg 
+                    ? 'text-white' 
+                    : needsTransparentWithDarkIcons 
+                    ? 'text-gray-800' 
+                    : 'text-gray-800'
+                }`}
+                style={{ color: getTextColor() }}
+              >
                 {isInvestmentPage ? (
                   <div className="text-4xl font-light tracking-[0.2em] uppercase flex items-baseline">
                     PIETA <span className="text-yellow-600 text-2xl ml-2 font-light">GOLD</span>
@@ -238,7 +348,16 @@ export default function Navbar() {
               {/* 장바구니 아이콘을 오른쪽으로 이동 */}
               <Link
                 href="/cart"
-                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'} relative mr-2 sm:mr-3 md:mr-4`}
+                className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                  isStorePage && activeStoreDesign 
+                    ? 'hover:bg-black/10' 
+                    : needsTransparentBg 
+                    ? 'hover:bg-white/20 text-white' 
+                    : needsTransparentWithDarkIcons 
+                    ? 'hover:bg-gray-100 text-gray-600' 
+                    : 'hover:bg-gray-100 text-gray-600'
+                } relative mr-2 sm:mr-3 md:mr-4`}
+                style={{ color: getIconColor() }}
                 aria-label="장바구니"
                 title="장바구니"
               >
@@ -256,7 +375,16 @@ export default function Navbar() {
                 <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5">
                   <Link
                     href="/wishlist"
-                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                      isStorePage && activeStoreDesign 
+                        ? 'hover:bg-black/10' 
+                        : needsTransparentBg 
+                        ? 'hover:bg-white/20 text-white' 
+                        : needsTransparentWithDarkIcons 
+                        ? 'hover:bg-gray-100 text-gray-600' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    style={{ color: getIconColor() }}
                     aria-label="위시리스트"
                     title="위시리스트"
                   >
@@ -266,7 +394,16 @@ export default function Navbar() {
                   </Link>
                   <button
                     onClick={openProfile}
-                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'} relative`}
+                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                      isStorePage && activeStoreDesign 
+                        ? 'hover:bg-black/10' 
+                        : needsTransparentBg 
+                        ? 'hover:bg-white/20 text-white' 
+                        : needsTransparentWithDarkIcons 
+                        ? 'hover:bg-gray-100 text-gray-600' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    } relative`}
+                    style={{ color: getIconColor() }}
                     aria-label="프로필"
                     title={isDeletedAccount 
                       ? `삭제된 계정 - ${deletedAccountInfo.message || '프로필 확인 필요'}` 
@@ -286,7 +423,16 @@ export default function Navbar() {
                 <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 lg:space-x-5">
                   <Link
                     href="/login"
-                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                      isStorePage && activeStoreDesign 
+                        ? 'hover:bg-black/10' 
+                        : needsTransparentBg 
+                        ? 'hover:bg-white/20 text-white' 
+                        : needsTransparentWithDarkIcons 
+                        ? 'hover:bg-gray-100 text-gray-600' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    style={{ color: getIconColor() }}
                     aria-label="로그인"
                     title="로그인"
                   >
@@ -296,7 +442,16 @@ export default function Navbar() {
                   </Link>
                   <Link
                     href="/signup"
-                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${needsTransparentBg ? 'hover:bg-white/20 text-white' : needsTransparentWithDarkIcons ? 'hover:bg-gray-100 text-gray-600' : 'hover:bg-gray-100 text-gray-600'}`}
+                    className={`p-2 sm:p-2.5 md:p-3 rounded-full ${
+                      isStorePage && activeStoreDesign 
+                        ? 'hover:bg-black/10' 
+                        : needsTransparentBg 
+                        ? 'hover:bg-white/20 text-white' 
+                        : needsTransparentWithDarkIcons 
+                        ? 'hover:bg-gray-100 text-gray-600' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
+                    style={{ color: getIconColor() }}
                     aria-label="회원가입"
                     title="회원가입"
                   >
