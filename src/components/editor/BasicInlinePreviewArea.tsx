@@ -115,6 +115,7 @@ export interface BannerBlockData extends StoreBlockBase {
   banner_title?: string;
   banner_description?: string;
   banner_image_url?: string;
+  show_store_header?: boolean; // 상점 헤더 표시 여부
 }
 
 export interface ListBlockData extends StoreBlockBase {
@@ -472,10 +473,11 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
   }, [blocks, design, onDesignUpdate]);
 
   // 새 블록 추가 핸들러 (위치 지정 가능)
-  const handleAddBlock = useCallback((type: StoreBlock['type'], position?: number) => {
+  const handleAddBlock = useCallback((type: StoreBlock['type'], position?: number, customData?: any) => {
     if (!isClient) return;
 
-    const newBlockData = getDefaultBlockData(type, isClient);
+    const defaultBlockData = getDefaultBlockData(type, isClient);
+    const newBlockData = customData ? { ...defaultBlockData, ...customData } : defaultBlockData;
     const targetPosition = position !== undefined ? position : blocks.length;
     
     // 기존 블록들의 position 업데이트
@@ -625,86 +627,6 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
           fontFamily: design.font_family || 'Inter'
         }}
       >
-        {/* 상점 헤더 배너 (SSR 버전) */}
-        <div 
-          className={`relative overflow-hidden ${
-            design.banner_height === 'small' ? 'h-64 md:h-80' :
-            design.banner_height === 'large' ? 'h-96 md:h-[32rem]' :
-            design.banner_height === 'full' ? 'h-screen' :
-            'h-80 md:h-96'
-          }`}
-          style={{ 
-            backgroundColor: design.theme_color || '#000000',
-            backgroundImage: design.banner_image_url 
-              ? `linear-gradient(to bottom right, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${design.banner_image_url})`
-              : `linear-gradient(to bottom right, ${design.theme_color || '#000000'}, #1f2937)`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
-          }}
-        >
-          {/* 배경 패턴 (이미지가 없을 때만) */}
-          {!design.banner_image_url && (
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent transform -skew-y-12"></div>
-            </div>
-          )}
-
-          {/* 상점 정보 오버레이 */}
-          <div className="absolute inset-0">
-            {/* 상점명 */}
-            <div 
-              className="absolute text-white"
-              style={{
-                left: `${design.title_position_x || 50}%`,
-                top: `${design.title_position_y || 40}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              <div className="flex items-center space-x-4">
-                <h1 className={`
-                  ${design.title_font_size === 'small' ? 'text-2xl md:text-3xl' :
-                    design.title_font_size === 'medium' ? 'text-3xl md:text-4xl' :
-                    design.title_font_size === 'xl' ? 'text-5xl md:text-6xl' :
-                    'text-4xl md:text-5xl'
-                  } font-light tracking-wide
-                `}>
-                  {storeData?.store_name || '상점 이름'}
-                </h1>
-                <span className={`px-3 py-1 text-xs uppercase tracking-wider font-medium border ${
-                  storeData?.is_open 
-                    ? 'bg-green-500/20 text-green-100 border-green-400/30'
-                    : 'bg-red-500/20 text-red-100 border-red-400/30'
-                }`}>
-                  {storeData?.is_open ? '영업중' : '휴무중'}
-                </span>
-              </div>
-            </div>
-            
-            {/* 상점 설명 */}
-            {design.show_store_description && (
-              <div 
-                className="absolute text-white"
-                style={{
-                  left: `${design.description_position_x || 50}%`,
-                  top: `${design.description_position_y || 60}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-              >
-                <p className={`
-                  text-center text-gray-200 max-w-2xl leading-relaxed
-                  ${design.description_font_size === 'small' ? 'text-xs md:text-sm' :
-                    design.description_font_size === 'large' ? 'text-base md:text-lg' :
-                    'text-sm md:text-base'
-                  }
-                `}>
-                  {storeData?.description || '상점 설명이 여기에 표시됩니다'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
         <div className="max-w-6xl mx-auto px-8 py-8">
           {/* 로딩 상태 표시 */}
           <div className="flex flex-col items-center justify-center h-96 space-y-4">
@@ -725,85 +647,6 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
         fontFamily: design.font_family || 'Inter'
       }}
     >
-      {/* 상점 헤더 배너 추가 */}
-      <div 
-        className={`relative overflow-hidden ${
-          design.banner_height === 'small' ? 'h-64 md:h-80' :
-          design.banner_height === 'large' ? 'h-96 md:h-[32rem]' :
-          design.banner_height === 'full' ? 'h-screen' :
-          'h-80 md:h-96'
-        }`}
-        style={{ 
-          backgroundColor: design.theme_color || '#000000',
-          backgroundImage: design.banner_image_url 
-            ? `linear-gradient(to bottom right, rgba(0,0,0,0.4), rgba(0,0,0,0.6)), url(${design.banner_image_url})`
-            : `linear-gradient(to bottom right, ${design.theme_color || '#000000'}, #1f2937)`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
-        }}
-      >
-        {/* 배경 패턴 (이미지가 없을 때만) */}
-        {!design.banner_image_url && (
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent transform -skew-y-12"></div>
-          </div>
-        )}
-
-        {/* 상점 정보 오버레이 */}
-        <div className="absolute inset-0">
-          {/* 상점명 */}
-          <div 
-            className="absolute text-white"
-            style={{
-              left: `${design.title_position_x || 50}%`,
-              top: `${design.title_position_y || 40}%`,
-              transform: 'translate(-50%, -50%)'
-            }}
-          >
-            <div className="flex items-center space-x-4">
-              <h1 className={`
-                ${design.title_font_size === 'small' ? 'text-2xl md:text-3xl' :
-                  design.title_font_size === 'medium' ? 'text-3xl md:text-4xl' :
-                  design.title_font_size === 'xl' ? 'text-5xl md:text-6xl' :
-                  'text-4xl md:text-5xl'
-                } font-light tracking-wide
-              `}>
-                {storeData?.store_name || '상점 이름'}
-              </h1>
-              <span className={`px-3 py-1 text-xs uppercase tracking-wider font-medium border ${
-                storeData?.is_open 
-                  ? 'bg-green-500/20 text-green-100 border-green-400/30'
-                  : 'bg-red-500/20 text-red-100 border-red-400/30'
-              }`}>
-                {storeData?.is_open ? '영업중' : '휴무중'}
-              </span>
-            </div>
-          </div>
-          
-          {/* 상점 설명 */}
-          {design.show_store_description && (
-            <div 
-              className="absolute text-white"
-              style={{
-                left: `${design.description_position_x || 50}%`,
-                top: `${design.description_position_y || 60}%`,
-                transform: 'translate(-50%, -50%)'
-              }}
-            >
-              <p className={`
-                text-center text-gray-200 max-w-2xl leading-relaxed
-                ${design.description_font_size === 'small' ? 'text-xs md:text-sm' :
-                  design.description_font_size === 'large' ? 'text-base md:text-lg' :
-                  'text-sm md:text-base'
-                }
-              `}>
-                {storeData?.description || '상점 설명이 여기에 표시됩니다'}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
 
       <div className="max-w-6xl mx-auto px-8 py-8">
         {/* 노션 스타일 블록 타입 선택 메뉴 - 읽기 전용 모드에서는 숨김 */}
@@ -819,6 +662,35 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                 </h3>
                 
                 <div className="space-y-1">
+                  {/* 상점 헤더 배너 (첫 번째 블록으로만 추가 가능) */}
+                  {(insertMenu.insertType === 'start' || (insertMenu.insertType === 'before' && insertMenu.position === 0)) && (
+                    <button
+                      onClick={() => {
+                        const newBlockData = getDefaultBlockData('banner', isClient);
+                        const storeHeaderBanner = {
+                          ...newBlockData,
+                          banner_height: 'large',
+                          banner_style: 'gradient',
+                          background_color: design.theme_color || '#000000',
+                          show_store_header: true,
+                          block_width: 'full-width'
+                        };
+                        handleAddBlock('banner', 0, storeHeaderBanner);
+                      }}
+                      className="w-full p-3 text-left hover:bg-blue-50 transition-colors duration-200 border border-transparent hover:border-blue-200 group bg-blue-50"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 flex items-center justify-center bg-blue-100 group-hover:bg-blue-200 transition-colors text-sm font-medium text-blue-600">
+                          🏪
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-blue-900">상점 헤더 배너</h4>
+                          <p className="text-xs text-blue-600 mt-1">상점명과 영업 상태를 표시하는 메인 배너</p>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                  
                   {[
                     { type: 'text' as const, name: '텍스트', icon: 'T', description: '일반 텍스트나 제목 추가' },
                     { type: 'banner' as const, name: '배너', icon: '█', description: '이미지 배너와 CTA 버튼' },
@@ -1047,6 +919,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                               canMoveUp={block.position > 0}
                                               canMoveDown={block.position < blocks.length - 1}
                                               products={products}
+                                              storeData={storeData}
                                               readOnly={readOnly}
                                             />
                                           </div>
@@ -1064,6 +937,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                             canMoveUp={block.position > 0}
                                             canMoveDown={block.position < blocks.length - 1}
                                             products={products}
+                                            storeData={storeData}
                                             readOnly={readOnly}
                                           />
                                         )}
@@ -1091,7 +965,7 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                       
                                       const deltaY = moveEvent.clientY - startY;
                                       const minHeight = block.min_height || 100;
-                                      const maxHeight = block.max_height || 800;
+                                      const maxHeight = block.max_height || 9999; // 최대 제한 대폭 완화
                                       const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
                                       
                                       handleBlockUpdate(block.id, { height: newHeight });
@@ -1171,6 +1045,7 @@ interface BasicInlineEditableBlockProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   products: any[];
+  storeData?: any;
   readOnly?: boolean;
 }
 
@@ -1187,13 +1062,14 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
   canMoveUp,
   canMoveDown,
   products,
+  storeData,
   readOnly = false
 }) => {
   // 높이 조절 핸들러
   const handleResize = useCallback((deltaY: number) => {
     const currentHeight = block.height || 300; // 기본 높이
     const minHeight = block.min_height || 100; // 최소 높이
-    const maxHeight = block.max_height || 800; // 최대 높이
+    const maxHeight = block.max_height || 9999; // 최대 제한 대폭 완화
     
     const newHeight = Math.max(minHeight, Math.min(maxHeight, currentHeight + deltaY));
     
@@ -1246,14 +1122,8 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
   const renderBlockContent = () => {
     switch (block.type) {
       case 'text':
-        // 텍스트 블록은 항상 읽기 전용으로 표시
-        return (
-          <div className="prose max-w-none">
-            <div dangerouslySetInnerHTML={{ 
-              __html: isTextBlock(block) ? (block.text_content || '텍스트를 입력하세요...') : '텍스트를 입력하세요...'
-            }} />
-          </div>
-        );
+        // 텍스트 블록 렌더러
+        return <BasicTextRenderer block={block} />;
 
       case 'grid':
         // 그리드는 항상 그리드만 표시
@@ -1261,7 +1131,7 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
 
       case 'banner':
         // 배너는 항상 렌더러만 표시
-        return <BasicBannerRenderer block={block} />;
+        return <BasicBannerRenderer block={block} storeData={storeData} />;
 
       case 'featured':
         // 피처드는 항상 렌더러만 표시
@@ -1416,25 +1286,251 @@ export const isMasonryBlock = (block: StoreBlock): block is MasonryBlockData => 
   return block.type === 'masonry';
 };
 
-// 기본 Tiptap 텍스트 에디터
-const BasicTiptapTextEditor: React.FC<{
+// 텍스트 블록 렌더러
+const BasicTextRenderer: React.FC<{
+  block: StoreBlock;
+}> = ({ block }) => {
+  if (!isTextBlock(block)) return null;
+  
+  // 텍스트 스타일 클래스 계산
+  const getSizeClass = () => {
+    switch (block.text_size) {
+      case 'small': return 'text-sm';
+      case 'large': return 'text-lg';
+      case 'xl': return 'text-xl';
+      case 'xxl': return 'text-2xl';
+      default: return 'text-base';
+    }
+  };
+  
+  const getWeightClass = () => {
+    switch (block.text_weight) {
+      case 'medium': return 'font-medium';
+      case 'semibold': return 'font-semibold';
+      case 'bold': return 'font-bold';
+      default: return 'font-normal';
+    }
+  };
+  
+  const getStyleClass = () => {
+    switch (block.text_style) {
+      case 'heading': return 'text-2xl font-bold mb-4';
+      case 'quote': return 'italic text-gray-600 border-l-4 border-gray-300 pl-4';
+      case 'highlight': return 'bg-yellow-100 px-2 py-1 rounded';
+      default: return '';
+    }
+  };
+  
+  const getMaxWidthClass = () => {
+    switch (block.max_width) {
+      case 'narrow': return 'max-w-md mx-auto';
+      case 'medium': return 'max-w-2xl mx-auto';
+      case 'wide': return 'max-w-4xl mx-auto';
+      case 'full': return 'max-w-none';
+      default: return 'max-w-2xl mx-auto';
+    }
+  };
+  
+  const getPaddingClass = () => {
+    switch (block.padding) {
+      case 'small': return 'p-2';
+      case 'large': return 'p-8';
+      case 'xl': return 'p-12';
+      default: return 'p-4';
+    }
+  };
+  
+  const combinedClasses = `
+    ${getSizeClass()} 
+    ${getWeightClass()} 
+    ${getStyleClass()} 
+    ${getMaxWidthClass()} 
+    ${getPaddingClass()}
+  `.trim();
+  
+  return (
+    <div 
+      className={combinedClasses}
+      style={{ 
+        color: block.text_color || '#000000',
+        backgroundColor: block.background_color
+      }}
+    >
+      <div dangerouslySetInnerHTML={{ 
+        __html: block.text_content || '텍스트를 입력하세요...'
+      }} />
+    </div>
+  );
+};
+
+// 향상된 텍스트 에디터
+const BasicTextEditor: React.FC<{
   block: StoreBlock;
   onUpdate: (blockId: string, data: any) => void;
 }> = ({ block, onUpdate }) => {
   if (!isTextBlock(block)) return null;
   
   return (
-    <div className="border-2 border-dashed border-green-300 p-4">
-      <p className="text-green-700 text-sm mb-2">Tiptap 에디터 (구현 예정)</p>
-      <textarea
-        className="w-full p-2 border"
-        defaultValue={block.text_content || ''}
-        onChange={(e) => {
-          onUpdate(block.id, { text_content: e.target.value });
-        }}
-        placeholder="텍스트를 입력하세요..."
-        rows={4}
-      />
+    <div className="border border-gray-200 p-8 bg-white">
+      <div className="space-y-8">
+        <div className="text-center border-b border-gray-100 pb-6">
+          <h4 className="text-lg font-light text-gray-900 tracking-wider uppercase mb-2">Text Editor</h4>
+          <p className="text-xs text-gray-500 font-light">Craft your content with precision</p>
+        </div>
+        
+        {/* 텍스트 내용 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+            Content
+          </label>
+          <textarea
+            value={block.text_content || ''}
+            onChange={(e) => onUpdate(block.id, { text_content: e.target.value })}
+            placeholder="Enter your text content..."
+            rows={6}
+            className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light resize-none"
+          />
+        </div>
+
+        {/* 스타일 설정 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Text Style
+            </label>
+            <select
+              value={block.text_style || 'paragraph'}
+              onChange={(e) => onUpdate(block.id, { text_style: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            >
+              <option value="paragraph">Paragraph</option>
+              <option value="heading">Heading</option>
+              <option value="quote">Quote</option>
+              <option value="highlight">Highlight</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Text Size
+            </label>
+            <select
+              value={block.text_size || 'medium'}
+              onChange={(e) => onUpdate(block.id, { text_size: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            >
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+              <option value="xl">Extra Large</option>
+              <option value="xxl">Double XL</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 글꼴 및 색상 설정 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Font Weight
+            </label>
+            <select
+              value={block.text_weight || 'normal'}
+              onChange={(e) => onUpdate(block.id, { text_weight: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            >
+              <option value="normal">Normal</option>
+              <option value="medium">Medium</option>
+              <option value="semibold">Semibold</option>
+              <option value="bold">Bold</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Text Color
+            </label>
+            <div className="flex space-x-2">
+              <input
+                type="color"
+                value={block.text_color || '#000000'}
+                onChange={(e) => onUpdate(block.id, { text_color: e.target.value })}
+                className="w-12 h-12 border border-gray-200 cursor-pointer"
+              />
+              <input
+                type="text"
+                value={block.text_color || '#000000'}
+                onChange={(e) => onUpdate(block.id, { text_color: e.target.value })}
+                placeholder="#000000"
+                className="flex-1 px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 레이아웃 설정 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Max Width
+            </label>
+            <select
+              value={block.max_width || 'medium'}
+              onChange={(e) => onUpdate(block.id, { max_width: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            >
+              <option value="narrow">Narrow</option>
+              <option value="medium">Medium</option>
+              <option value="wide">Wide</option>
+              <option value="full">Full Width</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+              Padding
+            </label>
+            <select
+              value={block.padding || 'medium'}
+              onChange={(e) => onUpdate(block.id, { padding: e.target.value })}
+              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            >
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+              <option value="xl">Extra Large</option>
+            </select>
+          </div>
+        </div>
+
+        {/* 배경색 설정 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
+            Background Color
+          </label>
+          <div className="flex space-x-2">
+            <input
+              type="color"
+              value={block.background_color || '#ffffff'}
+              onChange={(e) => onUpdate(block.id, { background_color: e.target.value })}
+              className="w-12 h-12 border border-gray-200 cursor-pointer"
+            />
+            <input
+              type="text"
+              value={block.background_color || ''}
+              onChange={(e) => onUpdate(block.id, { background_color: e.target.value })}
+              placeholder="Transparent"
+              className="flex-1 px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
+            />
+            <button
+              onClick={() => onUpdate(block.id, { background_color: undefined })}
+              className="px-4 py-3 border border-gray-200 hover:border-gray-900 transition-colors font-light"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1487,7 +1583,8 @@ const BasicProductGrid: React.FC<{
 // 배너 렌더러 컴포넌트
 const BasicBannerRenderer: React.FC<{
   block: StoreBlock;
-}> = ({ block }) => {
+  storeData?: any;
+}> = ({ block, storeData }) => {
   if (!isBannerBlock(block)) return null;
   
   const bannerRef = useRef<HTMLDivElement>(null);
@@ -1508,20 +1605,10 @@ const BasicBannerRenderer: React.FC<{
     block.banner_height === 'full' ? 'h-screen' : 'h-48'
   );
 
-  // 텍스트 정렬 클래스 계산
-  const alignmentClass = block.text_alignment === 'center' ? 'text-center' :
-                        block.text_alignment === 'right' ? 'text-right' :
-                        'text-left';
-  
-  // justify 클래스 계산 (전체 배너의 정렬)
-  const justifyClass = block.text_alignment === 'center' ? 'justify-center' :
-                      block.text_alignment === 'right' ? 'justify-end' :
-                      'justify-start';
-
   return (
     <div 
       ref={bannerRef}
-      className={`${bannerHeight} relative overflow-hidden flex items-center ${justifyClass}`}
+      className={`${bannerHeight} relative overflow-hidden flex items-center justify-center`}
       style={{ 
         backgroundColor: block.background_color || '#f3f4f6',
         backgroundImage: block.banner_image_url 
@@ -1533,21 +1620,41 @@ const BasicBannerRenderer: React.FC<{
         backgroundPosition: 'center'
       }}
     >
-      <div className={`${alignmentClass} text-white z-10 ${block.text_alignment !== 'center' ? 'mx-8' : ''}`}>
-        <h3 className="text-2xl md:text-4xl font-bold mb-4">
-          {block.banner_title || '특별 프로모션'}
-        </h3>
-        <p className="text-lg mb-6 opacity-90">
-          {block.banner_description || '지금 구매하시면 특별 할인 혜택을 받으실 수 있습니다'}
-        </p>
-        {block.call_to_action && (
-          <button className="px-8 py-3 bg-white text-gray-900 font-semibold hover:bg-gray-100 transition-colors">
-            {block.call_to_action}
-          </button>
-        )}
-      </div>
-      {block.banner_image_url && (
-        <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+      {/* 상점 헤더 오버레이 */}
+      {block.show_store_header && storeData && (
+        <div className="absolute inset-0 bg-black/40">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center text-white">
+              <div className="flex items-center justify-center space-x-4 mb-4">
+                <h1 className="text-4xl md:text-5xl font-light tracking-wide">
+                  {storeData.store_name || '상점 이름'}
+                </h1>
+                <span className={`px-3 py-1 text-xs uppercase tracking-wider font-medium border ${
+                  storeData.is_open 
+                    ? 'bg-green-500/20 text-green-100 border-green-400/30'
+                    : 'bg-red-500/20 text-red-100 border-red-400/30'
+                }`}>
+                  {storeData.is_open ? '영업중' : '휴무중'}
+                </span>
+              </div>
+              {storeData.description && (
+                <p className="text-lg text-gray-200 max-w-2xl mx-auto leading-relaxed">
+                  {storeData.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 일반 배너 내용 (상점 헤더가 아닌 경우) */}
+      {!block.show_store_header && !block.banner_image_url && (
+        <div className="text-gray-400 text-center">
+          <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p className="text-sm font-light">배너 이미지</p>
+        </div>
       )}
     </div>
   );
@@ -1685,47 +1792,7 @@ const BasicBannerEditor: React.FC<{
           )}
         </div>
 
-        {/* 배너 텍스트 편집 */}
-        <div className="grid grid-cols-1 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
-              Banner Title
-            </label>
-            <input
-              type="text"
-              value={block.banner_title || ''}
-              onChange={(e) => onUpdate(block.id, { banner_title: e.target.value })}
-              placeholder="Premium Collection"
-              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
-              Banner Description
-            </label>
-            <textarea
-              value={block.banner_description || ''}
-              onChange={(e) => onUpdate(block.id, { banner_description: e.target.value })}
-              placeholder="Discover our carefully curated selection of timeless pieces"
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light resize-none"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-900 uppercase tracking-wide mb-3">
-              Call to Action
-            </label>
-            <input
-              type="text"
-              value={block.call_to_action || ''}
-              onChange={(e) => onUpdate(block.id, { call_to_action: e.target.value })}
-              placeholder="Explore Collection"
-              className="w-full px-4 py-3 border border-gray-200 focus:outline-none focus:border-gray-900 transition-colors font-light"
-            />
-          </div>
-        </div>
+
 
         {/* 배너 높이 설정 */}
         <div>
@@ -1759,6 +1826,24 @@ const BasicBannerEditor: React.FC<{
           </select>
           <p className="text-xs text-gray-500 font-light mt-2">
             Full width banners extend to the screen edges, like the store header.
+          </p>
+        </div>
+
+        {/* 상점 헤더 옵션 */}
+        <div>
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={block.show_store_header || false}
+              onChange={(e) => onUpdate(block.id, { show_store_header: e.target.checked })}
+              className="w-4 h-4 text-gray-900 border-gray-300 focus:ring-gray-500 focus:ring-2"
+            />
+            <span className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+              Show Store Header
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 font-light mt-2">
+            Display store name, status, and description as header overlay
           </p>
         </div>
       </div>
@@ -2262,12 +2347,8 @@ const getDefaultBlockData = (type: StoreBlock['type'], isClient: boolean = true)
         type: 'banner',
         banner_height: 'medium',
         banner_style: 'solid',
-  
-        banner_title: '새로운 배너',
-        banner_description: '배너 설명을 입력하세요',
-        call_to_action: '자세히 보기',
-        text_alignment: 'center',
-        background_color: '#4b5563'
+        background_color: '#4b5563',
+        show_store_header: false
       } as Omit<BannerBlockData, 'id' | 'position'>;
 
     case 'grid':

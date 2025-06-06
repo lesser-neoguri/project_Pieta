@@ -24,10 +24,15 @@ type StoreBlock = {
   text_content?: string;
   text_size?: 'small' | 'medium' | 'large' | 'xl' | 'xxl';
   text_color?: string;
+  text_weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  text_style?: 'paragraph' | 'heading' | 'quote' | 'highlight';
+  max_width?: 'narrow' | 'medium' | 'wide' | 'full';
+  padding?: 'small' | 'medium' | 'large' | 'xl';
   max_products?: number;
   height?: number; // 픽셀 단위 높이
   min_height?: number; // 최소 높이
   max_height?: number; // 최대 높이
+  show_store_header?: boolean; // 상점 헤더 표시 여부 (배너 블록용)
 };
 
 type StoreDesign = {
@@ -313,18 +318,18 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
               <input
                 type="range"
                 min={block.min_height || 100}
-                max={block.max_height || 800}
-                value={block.height || 300}
+                max={Math.min(block.max_height || 5000, 5000)} 
+                value={Math.min(block.height || 300, 5000)}
                 onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value))}
                 className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
                 style={{
-                  background: `linear-gradient(to right, #374151 0%, #374151 ${((block.height || 300) - (block.min_height || 100)) / ((block.max_height || 800) - (block.min_height || 100)) * 100}%, #e5e7eb ${((block.height || 300) - (block.min_height || 100)) / ((block.max_height || 800) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
+                  background: `linear-gradient(to right, #374151 0%, #374151 ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
                 }}
               />
               <div className="flex justify-between mt-1 text-xs text-gray-400">
                 <span>{block.min_height || 100}px</span>
                 <span className="font-medium text-gray-600">{block.height || 300}px</span>
-                <span>{block.max_height || 800}px</span>
+                <span>5000px</span>
               </div>
             </div>
             
@@ -336,7 +341,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value) || 300)}
                 placeholder="300"
                 min={block.min_height || 100}
-                max={block.max_height || 800}
+                max={block.max_height || 9999}
                 className="flex-1 px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none rounded"
               />
               <span className="text-xs text-gray-500">px</span>
@@ -364,11 +369,11 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                   <label className="block text-xs text-gray-500 mb-1">최대 높이</label>
                   <input
                     type="number"
-                    value={block.max_height || 800}
-                    onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 800)}
-                    placeholder="800"
+                    value={block.max_height || 9999}
+                    onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 9999)}
+                    placeholder="9999"
                     min="200"
-                    max="2000"
+                    max="9999"
                     className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none rounded"
                   />
                 </div>
@@ -419,26 +424,120 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
                 value={block.text_content || ''}
                 onChange={(e) => updateSelectedBlockData('text_content', e.target.value)}
                 placeholder="텍스트를 입력하세요..."
-                rows={4}
+                rows={6}
                 className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none resize-none"
               />
             </div>
             
-            <div>
-              <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
-                텍스트 크기
-              </label>
-              <select
-                value={block.text_size || 'medium'}
-                onChange={(e) => updateSelectedBlockData('text_size', e.target.value)}
-                className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
-              >
-                <option value="small">작음</option>
-                <option value="medium">보통</option>
-                <option value="large">큼</option>
-                <option value="xl">매우 큼</option>
-                <option value="xxl">초대형</option>
-              </select>
+            {/* 텍스트 스타일 및 크기 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  텍스트 스타일
+                </label>
+                <select
+                  value={block.text_style || 'paragraph'}
+                  onChange={(e) => updateSelectedBlockData('text_style', e.target.value)}
+                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                >
+                  <option value="paragraph">일반 문단</option>
+                  <option value="heading">제목</option>
+                  <option value="quote">인용문</option>
+                  <option value="highlight">강조</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  텍스트 크기
+                </label>
+                <select
+                  value={block.text_size || 'medium'}
+                  onChange={(e) => updateSelectedBlockData('text_size', e.target.value)}
+                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                >
+                  <option value="small">작음</option>
+                  <option value="medium">보통</option>
+                  <option value="large">큼</option>
+                  <option value="xl">매우 큼</option>
+                  <option value="xxl">초대형</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 글꼴 굵기 및 색상 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  글꼴 굵기
+                </label>
+                <select
+                  value={block.text_weight || 'normal'}
+                  onChange={(e) => updateSelectedBlockData('text_weight', e.target.value)}
+                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                >
+                  <option value="normal">보통</option>
+                  <option value="medium">중간</option>
+                  <option value="semibold">세미볼드</option>
+                  <option value="bold">굵게</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  텍스트 색상
+                </label>
+                <div className="flex space-x-1">
+                  <input
+                    type="color"
+                    value={block.text_color || '#000000'}
+                    onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
+                    className="w-8 h-6 border border-gray-200 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={block.text_color || '#000000'}
+                    onChange={(e) => updateSelectedBlockData('text_color', e.target.value)}
+                    placeholder="#000000"
+                    className="flex-1 px-1 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 레이아웃 설정 */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  최대 너비
+                </label>
+                <select
+                  value={block.max_width || 'medium'}
+                  onChange={(e) => updateSelectedBlockData('max_width', e.target.value)}
+                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                >
+                  <option value="narrow">좁게</option>
+                  <option value="medium">보통</option>
+                  <option value="wide">넓게</option>
+                  <option value="full">전체 너비</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-600 mb-2 uppercase tracking-wide">
+                  패딩
+                </label>
+                <select
+                  value={block.padding || 'medium'}
+                  onChange={(e) => updateSelectedBlockData('padding', e.target.value)}
+                  className="w-full px-2 py-1 text-xs border border-gray-200 focus:border-gray-400 focus:outline-none"
+                >
+                  <option value="small">작게</option>
+                  <option value="medium">보통</option>
+                  <option value="large">크게</option>
+                  <option value="xl">매우 크게</option>
+                </select>
+              </div>
             </div>
 
             <div>

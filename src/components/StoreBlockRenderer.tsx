@@ -20,6 +20,7 @@ interface StoreBlockRendererProps {
   storeId: string;
   isOwner: boolean;
   onProductIndexUpdate: (newIndex: number) => void;
+  storeData?: any;
 }
 
 const StoreBlockRenderer: React.FC<StoreBlockRendererProps> = ({ 
@@ -28,7 +29,8 @@ const StoreBlockRenderer: React.FC<StoreBlockRendererProps> = ({
   productIndex, 
   storeId, 
   isOwner,
-  onProductIndexUpdate 
+  onProductIndexUpdate,
+  storeData
 }) => {
   const router = useRouter();
   
@@ -65,21 +67,41 @@ const StoreBlockRenderer: React.FC<StoreBlockRendererProps> = ({
           backgroundPosition: 'center'
         }}
       >
-        <div className="text-center text-white z-10">
-          <h3 className="text-2xl md:text-4xl font-bold mb-4">
-            {block.banner_title || '특별 프로모션'}
-          </h3>
-          <p className="text-lg mb-6 opacity-90">
-            {block.banner_description || '지금 구매하시면 특별 할인 혜택을 받으실 수 있습니다'}
-          </p>
-          {block.call_to_action && (
-            <button className="px-8 py-3 bg-white text-gray-900 font-semibold hover:bg-gray-100 transition-colors">
-              {block.call_to_action}
-            </button>
-          )}
-        </div>
-        {block.banner_image_url && (
-          <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+        {/* 상점 헤더 오버레이 */}
+        {block.show_store_header && storeData && (
+          <div className="absolute inset-0 bg-black/40">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-white">
+                <div className="flex items-center justify-center space-x-4 mb-4">
+                  <h1 className="text-4xl md:text-5xl font-light tracking-wide">
+                    {storeData.store_name || '상점 이름'}
+                  </h1>
+                  <span className={`px-3 py-1 text-xs uppercase tracking-wider font-medium border ${
+                    storeData.is_open 
+                      ? 'bg-green-500/20 text-green-100 border-green-400/30'
+                      : 'bg-red-500/20 text-red-100 border-red-400/30'
+                  }`}>
+                    {storeData.is_open ? '영업중' : '휴무중'}
+                  </span>
+                </div>
+                {storeData.description && (
+                  <p className="text-lg text-gray-200 max-w-2xl mx-auto leading-relaxed">
+                    {storeData.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 일반 배너 내용 (상점 헤더가 아닌 경우) */}
+        {!block.show_store_header && !block.banner_image_url && (
+          <div className="text-gray-400 text-center">
+            <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="text-sm font-light">배너 이미지</p>
+          </div>
         )}
       </div>
     );
