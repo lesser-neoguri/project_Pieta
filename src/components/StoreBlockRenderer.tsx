@@ -186,7 +186,7 @@ const StoreBlockRenderer: React.FC<StoreBlockRendererProps> = ({
           if (product.isAddCard) {
             return (
               <Link key="add-product" href={`/store/${storeId}/product/create`} className="group cursor-pointer">
-                <div className={`bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center ${aspectClass || 'aspect-square'}`}>
+                <div className={`bg-[#f8f8f8] transition-colors duration-300 flex items-center justify-center ${aspectClass || 'aspect-square'}`}>
                   <div className="text-center">
                     <svg className="w-12 h-12 text-gray-400 group-hover:text-gray-500 transition-colors mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
@@ -242,8 +242,8 @@ const StoreBlockRenderer: React.FC<StoreBlockRendererProps> = ({
           if (product.isAddCard) {
             return (
               <Link key="add-product" href={`/store/${storeId}/product/create`} className="group cursor-pointer">
-                <div className="flex items-center space-x-4 p-4 border border-gray-200 hover:shadow-lg transition-shadow">
-                  <div className="w-24 h-24 bg-[#f8f8f8] border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors duration-300 flex items-center justify-center">
+                <div className="flex items-center space-x-4 p-4 hover:shadow-lg transition-shadow">
+                  <div className="w-24 h-24 bg-[#f8f8f8] transition-colors duration-300 flex items-center justify-center">
                     <svg className="w-8 h-8 text-gray-400 group-hover:text-gray-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 4v16m8-8H4" />
                     </svg>

@@ -7,6 +7,7 @@ import { ErrorProvider } from '@/contexts/ErrorContext';
 import { PageStyleProvider } from '@/contexts/PageStyleContext';
 import ProfileSidebar from '@/components/ProfileSidebar';
 import Navbar from "@/components/Navbar";
+import DebugTools from "@/components/DebugTools";
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -49,6 +50,7 @@ export default function RootLayout({
               <Navbar />
               <main>{children}</main>
               <ProfileSidebar />
+              <DebugTools />
             </PageStyleProvider>
           </ProfileProvider>
         </AuthProvider>

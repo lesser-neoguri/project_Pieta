@@ -34,6 +34,7 @@ type StoreBlock = {
   max_height?: number; // 최대 높이
   show_store_header?: boolean; // 상점 헤더 표시 여부 (배너 블록용)
   banner_image_url?: string; // 배너 블록 이미지 URL
+  height_unit?: 'px' | 'vh' | 'visible'; // 높이 단위 선택
 };
 
 type StoreDesign = {
@@ -111,6 +112,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
   const [selectedBlock, setSelectedBlock] = useState<StoreBlock | null>(null);
   const [activeTab, setActiveTab] = useState<'design' | 'block'>('design');
   const [imageUploading, setImageUploading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
 
 
@@ -171,21 +173,41 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     fetchStoreData();
   }, [user, storeId]);
 
-  // 사이드바 상태에 따라 네비게이션 바 마진 조정
+  // 사이드바 상태에 따라 전체 페이지(네비게이션 바, 메인 콘텐츠) 동시 이동
   useEffect(() => {
     if (typeof document !== 'undefined') {
       const navbar = document.querySelector('nav') as HTMLElement;
+      const mainContent = document.querySelector('main') as HTMLElement;
+      
+      // 동일한 스타일 설정
+      const sidebarWidth = '384px'; // w-96 = 24rem = 384px
+      const transition = 'margin-left 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      
       if (navbar) {
         if (sidebarOpen) {
-          navbar.style.marginLeft = '320px'; // 80 * 4 = 320px (w-80)
-          navbar.style.transition = 'margin-left 0.3s ease, max-width 0.3s ease';
-          navbar.style.maxWidth = 'calc(100vw - 320px)';
-          navbar.style.width = 'calc(100vw - 320px)';
+          navbar.style.marginLeft = sidebarWidth;
+          navbar.style.transition = transition;
+          navbar.style.width = `calc(100vw - ${sidebarWidth})`;
+          navbar.style.maxWidth = `calc(100vw - ${sidebarWidth})`;
         } else {
           navbar.style.marginLeft = '0px';
-          navbar.style.transition = 'margin-left 0.3s ease, max-width 0.3s ease';
-          navbar.style.maxWidth = '100vw';
+          navbar.style.transition = transition;
           navbar.style.width = '100vw';
+          navbar.style.maxWidth = '100vw';
+        }
+      }
+      
+      if (mainContent) {
+        if (sidebarOpen) {
+          mainContent.style.marginLeft = sidebarWidth;
+          mainContent.style.transition = transition;
+          mainContent.style.width = `calc(100vw - ${sidebarWidth})`;
+          mainContent.style.maxWidth = `calc(100vw - ${sidebarWidth})`;
+        } else {
+          mainContent.style.marginLeft = '0px';
+          mainContent.style.transition = transition;
+          mainContent.style.width = '100vw';
+          mainContent.style.maxWidth = '100vw';
         }
       }
     }
@@ -194,12 +216,16 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     return () => {
       if (typeof document !== 'undefined') {
         const navbar = document.querySelector('nav') as HTMLElement;
-        if (navbar) {
-          navbar.style.marginLeft = '';
-          navbar.style.transition = '';
-          navbar.style.maxWidth = '';
-          navbar.style.width = '';
-        }
+        const mainContent = document.querySelector('main') as HTMLElement;
+        
+        [navbar, mainContent].forEach(element => {
+          if (element) {
+            element.style.marginLeft = '';
+            element.style.transition = '';
+            element.style.width = '';
+            element.style.maxWidth = '';
+          }
+        });
       }
     };
   }, [sidebarOpen]);
@@ -468,6 +494,22 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
     
     // 숫자 값 안전 처리
     let safeValue = value;
+    let additionalUpdates = {};
+    
+    // 높이 단위가 변경되는 경우 적절한 기본값으로 조정
+    if (field === 'height_unit') {
+      if (value === 'vh') {
+        // px에서 vh로 변경 시 기본값 50vh 설정
+        additionalUpdates = { height: 50 };
+      } else if (value === 'visible') {
+        // px에서 visible로 변경 시 기본값 50% 설정
+        additionalUpdates = { height: 50 };
+      } else if (value === 'px') {
+        // vh나 visible에서 px로 변경 시 기본값 300px 설정
+        additionalUpdates = { height: 300 };
+      }
+    }
+    
     if (field === 'height' || field === 'min_height' || field === 'max_height') {
       const numValue = typeof value === 'string' ? parseInt(value) : value;
       
@@ -476,9 +518,14 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
         return; // 잘못된 값은 무시
       }
       
-      // 범위 체크 및 보정
+      // 단위에 따른 범위 체크 및 보정
+      const isVhOrVisible = selectedBlock.height_unit === 'vh' || selectedBlock.height_unit === 'visible';
       if (field === 'height') {
-        safeValue = Math.max(50, Math.min(9999, numValue));
+        if (isVhOrVisible) {
+          safeValue = Math.max(10, Math.min(100, numValue));
+        } else {
+          safeValue = Math.max(50, Math.min(9999, numValue));
+        }
       } else if (field === 'min_height') {
         safeValue = Math.max(50, Math.min(500, numValue));
       } else if (field === 'max_height') {
@@ -491,7 +538,8 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       ...design.row_layouts,
       [blockIndex]: {
         ...design.row_layouts[blockIndex],
-        [field]: safeValue
+        [field]: safeValue,
+        ...additionalUpdates
       }
     };
 
@@ -502,8 +550,54 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
 
     setSelectedBlock(prev => prev ? {
       ...prev,
-      [field]: safeValue
+      [field]: safeValue,
+      ...additionalUpdates
     } : null);
+  };
+
+  // 블록 삭제 함수 추가
+  const handleDeleteBlock = () => {
+    if (!selectedBlock || !design.row_layouts) return;
+    setShowDeleteModal(true);
+  };
+
+  // 삭제 확인 후 실제 삭제 실행
+  const confirmDeleteBlock = () => {
+    if (!selectedBlock || !design.row_layouts) return;
+
+    const currentLayouts = design.row_layouts;
+    const updatedLayouts: { [key: number]: any } = {};
+    
+    // 삭제할 블록의 위치를 제외하고 나머지 블록들의 위치를 재조정
+    Object.keys(currentLayouts).forEach((key) => {
+      const position = parseInt(key);
+      if (position < selectedBlock.position) {
+        // 삭제할 블록보다 앞에 있는 블록들은 그대로
+        updatedLayouts[position] = currentLayouts[position];
+      } else if (position > selectedBlock.position) {
+        // 삭제할 블록보다 뒤에 있는 블록들은 위치를 하나씩 앞으로
+        updatedLayouts[position - 1] = {
+          ...currentLayouts[position],
+          position: position - 1
+        };
+      }
+      // position === selectedBlock.position인 경우는 제외 (삭제)
+    });
+
+    setDesign(prev => ({
+      ...prev,
+      row_layouts: updatedLayouts
+    }));
+
+    // 선택된 블록 및 모달 초기화
+    setSelectedBlock(null);
+    setActiveTab('design');
+    setShowDeleteModal(false);
+  };
+
+  // 삭제 취소
+  const cancelDeleteBlock = () => {
+    setShowDeleteModal(false);
   };
 
   const renderBlockSettings = (block: StoreBlock) => {
@@ -570,24 +664,66 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             BLOCK HEIGHT
           </label>
           <div className="space-y-6">
+            {/* 높이 단위 선택 */}
+            <div className="border border-black">
+              <select
+                value={block.height_unit || 'px'}
+                onChange={(e) => updateSelectedBlockData('height_unit', e.target.value)}
+                className="w-full px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+              >
+                <option value="px">PIXELS (PX)</option>
+                <option value="vh">VIEWPORT HEIGHT (VH)</option>
+                <option value="visible">VISIBLE HEIGHT</option>
+              </select>
+            </div>
+            <div className="text-xs text-gray-500 font-light tracking-wide">
+              {block.height_unit === 'vh' ? 
+                'Viewport height automatically adapts to different screen sizes' : 
+                block.height_unit === 'visible' ?
+                'Visible height fits exactly to the content area excluding navigation bars' :
+                'Use slider or input field to adjust height precisely'
+              }
+            </div>
+            
             {/* 높이 슬라이더 */}
             <div className="relative border border-black p-4">
               <input
                 type="range"
-                min={block.min_height || 100}
-                max={Math.min(block.max_height || 5000, 5000)} 
-                step="5"
-                value={Math.min(block.height || 300, 5000)}
+                min={block.height_unit === 'vh' || block.height_unit === 'visible' ? 10 : (block.min_height || 100)}
+                max={block.height_unit === 'vh' || block.height_unit === 'visible' ? 100 : Math.min(block.max_height || 5000, 5000)} 
+                step={block.height_unit === 'vh' || block.height_unit === 'visible' ? 1 : 5}
+                value={block.height_unit === 'vh' || block.height_unit === 'visible' ? 
+                  Math.min(block.height || 50, 100) : 
+                  Math.min(block.height || 300, 5000)
+                }
                 onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value))}
                 className="w-full slider"
                 style={{
-                  background: `linear-gradient(to right, #000000 0%, #000000 ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
+                  background: block.height_unit === 'vh' || block.height_unit === 'visible' ?
+                    `linear-gradient(to right, #000000 0%, #000000 ${(Math.min(block.height || 50, 100) - 10) / (100 - 10) * 100}%, #e5e7eb ${(Math.min(block.height || 50, 100) - 10) / (100 - 10) * 100}%, #e5e7eb 100%)` :
+                    `linear-gradient(to right, #000000 0%, #000000 ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb ${((Math.min(block.height || 300, 5000)) - (block.min_height || 100)) / ((Math.min(block.max_height || 5000, 5000)) - (block.min_height || 100)) * 100}%, #e5e7eb 100%)`
                 }}
               />
               <div className="flex justify-between mt-3 text-xs text-gray-500 font-light tracking-wide">
-                <span>{block.min_height || 100}PX</span>
-                <span className="text-black font-medium tracking-[0.1em]">{block.height || 300}PX</span>
-                <span>5000PX</span>
+                {block.height_unit === 'vh' ? (
+                  <>
+                    <span>10VH</span>
+                    <span className="text-black font-medium tracking-[0.1em]">{block.height || 50}VH</span>
+                    <span>100VH</span>
+                  </>
+                ) : block.height_unit === 'visible' ? (
+                  <>
+                    <span>10%</span>
+                    <span className="text-black font-medium tracking-[0.1em]">{block.height || 50}%</span>
+                    <span>100%</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{block.min_height || 100}PX</span>
+                    <span className="text-black font-medium tracking-[0.1em]">{block.height || 300}PX</span>
+                    <span>5000PX</span>
+                  </>
+                )}
               </div>
             </div>
             
@@ -595,55 +731,64 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             <div className="flex items-center border border-black">
               <input
                 type="number"
-                value={block.height || 300}
-                onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value) || 300)}
-                placeholder="300"
-                min={block.min_height || 100}
-                max={block.max_height || 9999}
+                value={block.height || (block.height_unit === 'vh' || block.height_unit === 'visible' ? 50 : 300)}
+                onChange={(e) => updateSelectedBlockData('height', parseInt(e.target.value) || (block.height_unit === 'vh' || block.height_unit === 'visible' ? 50 : 300))}
+                placeholder={block.height_unit === 'vh' || block.height_unit === 'visible' ? '50' : '300'}
+                min={block.height_unit === 'vh' || block.height_unit === 'visible' ? 10 : (block.min_height || 100)}
+                max={block.height_unit === 'vh' || block.height_unit === 'visible' ? 100 : (block.max_height || 9999)}
                 className="flex-1 px-4 py-3 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
               />
-              <span className="px-4 py-3 text-xs text-gray-500 font-light tracking-wide border-l border-black">PX</span>
+              <span className="px-4 py-3 text-xs text-gray-500 font-light tracking-wide border-l border-black">
+                {block.height_unit === 'vh' ? 'VH' : block.height_unit === 'visible' ? '%' : 'PX'}
+              </span>
             </div>
             
-            {/* 최소/최대값 설정 */}
-            <details className="border border-black">
-              <summary className="px-4 py-3 text-xs text-gray-700 cursor-pointer hover:bg-gray-50 font-light tracking-[0.1em] uppercase">
-                ADVANCED SETTINGS
-              </summary>
-              <div className="border-t border-black p-4 space-y-4">
-                <div>
-                  <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MIN HEIGHT</label>
-                  <div className="border border-gray-300">
-                    <input
-                      type="number"
-                      value={block.min_height || 100}
-                      onChange={(e) => updateSelectedBlockData('min_height', parseInt(e.target.value) || 100)}
-                      placeholder="100"
-                      min="50"
-                      max="500"
-                      className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
-                    />
+            {/* 최소/최대값 설정 - 픽셀 모드일 때만 표시 */}
+            {block.height_unit !== 'vh' && block.height_unit !== 'visible' && (
+              <details className="border border-black">
+                <summary className="px-4 py-3 text-xs text-gray-700 cursor-pointer hover:bg-gray-50 font-light tracking-[0.1em] uppercase">
+                  ADVANCED SETTINGS
+                </summary>
+                <div className="border-t border-black p-4 space-y-4">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MIN HEIGHT</label>
+                    <div className="border border-gray-300">
+                      <input
+                        type="number"
+                        value={block.min_height || 100}
+                        onChange={(e) => updateSelectedBlockData('min_height', parseInt(e.target.value) || 100)}
+                        placeholder="100"
+                        min="50"
+                        max="500"
+                        className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MAX HEIGHT</label>
+                    <div className="border border-gray-300">
+                      <input
+                        type="number"
+                        value={block.max_height || 9999}
+                        onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 9999)}
+                        placeholder="9999"
+                        min="200"
+                        max="9999"
+                        className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-2 font-light tracking-wide uppercase">MAX HEIGHT</label>
-                  <div className="border border-gray-300">
-                    <input
-                      type="number"
-                      value={block.max_height || 9999}
-                      onChange={(e) => updateSelectedBlockData('max_height', parseInt(e.target.value) || 9999)}
-                      placeholder="9999"
-                      min="200"
-                      max="9999"
-                      className="w-full px-3 py-2 text-xs border-0 focus:outline-none bg-white font-light tracking-wider"
-                    />
-                  </div>
-                </div>
-              </div>
-            </details>
+              </details>
+            )}
             
             <div className="text-xs text-gray-500 font-light tracking-wide">
-              Use slider or input field to adjust height precisely
+              {block.height_unit === 'vh' ?
+                'Viewport height automatically adapts to different screen sizes' :
+                block.height_unit === 'visible' ?
+                'Visible height fits exactly to the content area excluding navigation bars' :
+                'Use slider or input field to adjust height precisely'
+              }
             </div>
           </div>
         </div>
@@ -669,6 +814,19 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
             </div>
           </div>
         )}
+
+        {/* 삭제 버튼 */}
+        <div className="pt-6 border-t border-gray-200">
+          <button
+            onClick={handleDeleteBlock}
+            className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white text-xs font-medium uppercase tracking-[0.15em] transition-colors duration-200"
+          >
+            DELETE BLOCK
+          </button>
+          <div className="mt-2 text-xs text-gray-500 font-light tracking-wide text-center">
+            This action cannot be undone
+          </div>
+        </div>
       </>
     );
 
@@ -998,23 +1156,30 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       return (
       <div className="min-h-screen bg-white flex">
       {/* 사이드바 토글 버튼 - 디올 스타일 */}
-      <div className={`fixed top-1/2 -translate-y-1/2 z-50 transition-all duration-500 ${
+      <div className={`fixed top-1/2 -translate-y-1/2 z-[100] transition-all duration-500 ${
         sidebarOpen ? 'left-96' : 'left-0'
       }`}>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className={`bg-black text-white border border-black hover:bg-white hover:text-black transition-all duration-300 flex flex-col items-center justify-center ${
+          className={`bg-black text-white border border-black hover:bg-white hover:text-black transition-all duration-300 flex flex-col items-center justify-center !rounded-none rounded-none ${
             sidebarOpen 
-              ? 'py-8 px-4' 
-              : 'py-16 px-5 border-l-0'
+              ? 'py-4 px-2' 
+              : 'py-8 px-3 border-l-0'
           }`}
           style={{
             writingMode: 'vertical-rl',
-            textOrientation: 'mixed'
+            textOrientation: 'mixed',
+            borderRadius: '0',
+            borderTopLeftRadius: '0',
+            borderTopRightRadius: '0',
+            borderBottomLeftRadius: '0',
+            borderBottomRightRadius: '0',
+            WebkitBorderRadius: '0',
+            MozBorderRadius: '0'
           }}
         >
-          <div className="flex flex-col items-center space-y-4">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1}>
+          <div className="flex flex-col items-center space-y-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
               {sidebarOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               ) : (
@@ -1022,7 +1187,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
               )}
             </svg>
             {!sidebarOpen && (
-              <div className="text-xs font-light uppercase tracking-[0.3em] whitespace-nowrap">
+              <div className="text-[10px] font-light uppercase tracking-[0.2em] whitespace-nowrap">
                 <span style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
                   DESIGN ATELIER
                 </span>
@@ -1878,15 +2043,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       </div>
 
       {/* 메인 콘텐츠 - 우측 미리보기 영역 */}
-      <div 
-        className={`flex-1 transition-all duration-500 ${sidebarOpen ? 'ml-96' : 'ml-0'} border-l border-black bg-gray-50`}
-        style={{
-          '--sidebar-width': sidebarOpen ? '24rem' : '0rem',
-          '--sidebar-open': sidebarOpen ? '1' : '0',
-          maxWidth: sidebarOpen ? 'calc(100vw - 24rem)' : '100vw',
-          width: sidebarOpen ? 'calc(100vw - 24rem)' : '100vw'
-        } as React.CSSProperties}
-      >
+      <div className="flex-1 border-l border-black bg-gray-50">
         <div className="store-design-preview">
           <BasicInlinePreviewArea 
             storeId={storeId}
@@ -1980,12 +2137,12 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
         
         /* contained 블록 컨테이너 스타일은 이제 BasicInlinePreviewArea에서 직접 처리 */
         
-        /* 풀 와이드 블록 컨테이너 설정 */
+        /* 풀 와이드 블록 컨테이너 설정 - 사이드바 상태에 따라 동적 조정 */
         .store-design-preview :global([style*="calc(100% + 4rem)"]) {
-          width: calc(100vw - var(--sidebar-width, 0rem)) !important;
+          width: calc(100vw - ${sidebarOpen ? '384px' : '0px'}) !important;
           max-width: none !important;
-          transition: width 0.5s ease, margin-left 0.5s ease !important;
-          margin-left: calc(-50vw + 50% + var(--sidebar-width, 0rem) / 2) !important;
+          transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), margin-left 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+          margin-left: calc(-50vw + 50% + ${sidebarOpen ? '192px' : '0px'}) !important;
           margin-right: calc(-50vw + 50%) !important;
         }
         
@@ -2003,6 +2160,83 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
       `}</style>
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* 오버레이 */}
+          <div 
+            className="absolute inset-0 bg-black bg-opacity-50 transition-opacity duration-300"
+            onClick={cancelDeleteBlock}
+          />
+          
+          {/* 모달 컨텐츠 */}
+          <div className="relative bg-white w-full max-w-md mx-4 transform transition-all duration-300 scale-100">
+            {/* 헤더 */}
+            <div className="border-b border-gray-200 px-8 py-6">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-red-50 border border-red-200 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 uppercase tracking-[0.1em]">
+                    DELETE CONFIRMATION
+                  </h3>
+                  <p className="text-xs text-gray-500 font-light tracking-wide mt-1">
+                    {selectedBlock ? getBlockTypeLabel(selectedBlock.type) : 'BLOCK'} ELEMENT
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 바디 */}
+            <div className="px-8 py-8">
+              <div className="space-y-6">
+                <p className="text-sm text-gray-700 font-light leading-relaxed tracking-wide">
+                  이 블록을 삭제하시겠습니까? 블록의 모든 설정과 콘텐츠가 영구적으로 제거되며, 
+                  이 작업은 되돌릴 수 없습니다.
+                </p>
+                
+                <div className="bg-gray-50 border border-gray-200 p-4">
+                  <div className="flex items-start space-x-3">
+                    <svg className="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 uppercase tracking-[0.1em] mb-1">
+                        NOTICE
+                      </p>
+                      <p className="text-xs text-gray-600 font-light leading-relaxed">
+                        다른 블록들의 순서가 자동으로 재정렬됩니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 푸터 */}
+            <div className="border-t border-gray-200 px-8 py-6">
+              <div className="flex space-x-4">
+                <button
+                  onClick={cancelDeleteBlock}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 text-xs font-medium uppercase tracking-[0.15em] hover:bg-gray-50 transition-colors duration-200"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={confirmDeleteBlock}
+                  className="flex-1 px-6 py-3 bg-red-600 text-white text-xs font-medium uppercase tracking-[0.15em] hover:bg-red-700 transition-colors duration-200"
+                >
+                  DELETE
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

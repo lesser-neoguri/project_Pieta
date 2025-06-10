@@ -225,13 +225,13 @@ export default function ProductCard({
       <div className="mt-3 flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
         <button
           onClick={(e) => handleActionClick(e, 'edit')}
-          className="flex-1 px-3 py-1 text-xs text-center border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors uppercase tracking-wider"
+          className="flex-1 px-3 py-1 text-xs text-center text-gray-700 hover:bg-gray-50 transition-colors uppercase tracking-wider"
         >
           수정
         </button>
         <button
           onClick={(e) => handleActionClick(e, 'delete')}
-          className="flex-1 px-3 py-1 text-xs text-center border border-red-300 text-red-600 hover:bg-red-50 transition-colors uppercase tracking-wider"
+          className="flex-1 px-3 py-1 text-xs text-center text-red-600 hover:bg-red-50 transition-colors uppercase tracking-wider"
         >
           삭제
         </button>
@@ -244,12 +244,12 @@ export default function ProductCard({
     return (
       <div className={`group ${className}`}>
         <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
-          <div className={`bg-[#f8f8f8] relative mb-4 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
+          <div className={`relative mb-4 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
             {product.product_image_url && !imageError ? (
               <img 
                 src={product.product_image_url} 
                 alt={product.product_name} 
-                className="w-full h-full object-contain p-3 group-hover:scale-102 transition-transform duration-300"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={handleImageError}
               />
             ) : (
@@ -282,18 +282,18 @@ export default function ProductCard({
     return (
       <div className={`group ${className}`}>
         <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
-          <div className={`overflow-hidden bg-[#f8f8f8] mb-6 relative ${customAspectRatio || 'aspect-square'}`}>
+          <div className={`overflow-hidden mb-6 relative ${customAspectRatio || 'aspect-square'}`}>
             {renderBadges()}
             
             {product.product_image_url && !imageError ? (
               <img
                 src={product.product_image_url}
                 alt={product.product_name}
-                className="w-full h-full object-contain p-3 group-hover:scale-102 transition-all duration-300 ease-out"
+                className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300 ease-out"
                 onError={handleImageError}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
+              <div className="w-full h-full flex items-center justify-center text-gray-400">
                 <span className="text-4xl font-light">
                   {product.product_name.charAt(0)}
                 </span>
@@ -336,12 +336,12 @@ export default function ProductCard({
     <div className={`group ${className}`}>
       <Link href={`/store/${product.store_id}/product/${product.id}`} className="block">
         {/* 제품 이미지 - 더 크게 */}
-        <div className={`bg-[#f8f8f8] relative mb-5 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
+        <div className={`relative mb-5 overflow-hidden ${customAspectRatio || 'aspect-square'}`}>
           {product.product_image_url && !imageError ? (
             <img
               src={product.product_image_url}
               alt={product.product_name}
-              className="w-full h-full object-contain p-3 group-hover:scale-102 transition-transform duration-300"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={handleImageError}
             />
           ) : (

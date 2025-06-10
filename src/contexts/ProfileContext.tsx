@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 interface ProfileContextType {
   isProfileOpen: boolean;
@@ -15,13 +15,35 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const openProfile = () => {
     setIsProfileOpen(true);
+    // body overflow를 안전하게 설정
+    if (typeof document !== 'undefined') {
     document.body.style.overflow = 'hidden';
+    }
   };
 
   const closeProfile = () => {
     setIsProfileOpen(false);
-    document.body.style.overflow = 'auto';
+    // body overflow를 안전하게 복원
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = '';
+    }
   };
+
+  // 컴포넌트 언마운트 시 안전하게 복원
+  useEffect(() => {
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.style.overflow = '';
+      }
+    };
+  }, []);
+
+  // 프로필이 닫힐 때도 안전하게 복원
+  useEffect(() => {
+    if (!isProfileOpen && typeof document !== 'undefined') {
+      document.body.style.overflow = '';
+    }
+  }, [isProfileOpen]);
 
   return (
     <ProfileContext.Provider value={{ isProfileOpen, openProfile, closeProfile }}>

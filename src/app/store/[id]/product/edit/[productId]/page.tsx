@@ -106,6 +106,9 @@ export default function EditProductPage() {
   // 아코디언 메뉴 상태 관리
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
   
+  // 탭 상태 관리
+  const [activeTab, setActiveTab] = useState<string>('basic');
+  
   // 인라인 편집 상태 관리
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -933,529 +936,381 @@ export default function EditProductPage() {
             </div>
           </div>
 
-          {/* 오른쪽: 제품 정보 수정 폼 */}
-          <div className="md:w-1/2 pl-0 md:pl-8 lg:pl-12 px-5 sm:px-6 md:px-0">
-            <div className="h-full flex flex-col md:max-w-md md:ml-8 lg:ml-16">
-              {/* 상단 여백 */}
-              <div className="flex-grow mb-auto md:min-h-[150px] lg:min-h-[200px]"></div>
+          {/* 오른쪽: 제품 정보 섹션 */}
+          <div className="w-full md:w-1/2 px-4 sm:px-6 md:px-0 md:pl-8 lg:pl-12">
+            <div className="h-full flex flex-col max-w-full md:max-w-lg md:ml-12 lg:ml-20">
+              {/* 상단 여백 - 데스크톱에서만 적용 */}
+              <div className="hidden md:block md:h-32 lg:h-40 xl:h-48"></div>
               
-              {/* 제품 정보 폼 */}
-          <div>
-                <div className="mb-10">
-                  <Link href={`/store/${storeId}`} className="inline-block mb-2">
-                    <h2 className="text-sm uppercase tracking-widest text-gray-600 font-medium">
-                      {store?.store_name || '상점명'}
-                    </h2>
-                  </Link>
-                  
-                  {/* 제품명 인라인 편집 */}
-                  <div className="relative group mb-6">
-                    {product && editingField === 'product_name' ? (
-                      <div>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-gray-300 text-2xl font-medium"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                        />
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                            onClick={() => saveEditing('product_name')}
-                          >
-                            저장
-                          </button>
-                          <button
-                            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                            onClick={cancelEditing}
-                          >
-                            취소
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <h1 className="text-2xl font-medium text-gray-900">{product?.product_name}</h1>
-                        <button 
-                          className="absolute -right-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-500 underline"
-                          onClick={() => startEditing('product_name', product?.product_name || '')}
-                        >
-                          수정
-                        </button>
-                      </>
-                    )}
-            </div>
-
-                  {/* 가격 인라인 편집 */}
-                  <div className="relative group mb-8">
-                    {product && editingField === 'price' ? (
-                      <div>
-                        <div className="flex items-center">
-                          <input
-                            type="number"
-                            className="w-full px-3 py-2 border border-gray-300 text-lg"
-                            value={editNumberValue}
-                            onChange={(e) => setEditNumberValue(parseInt(e.target.value) || 0)}
-                            min="0"
-                          />
-                          <span className="ml-2">원</span>
-                        </div>
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                            onClick={() => saveEditing('price')}
-                          >
-                            저장
-                          </button>
-                          <button
-                            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                            onClick={cancelEditing}
-                          >
-                            취소
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <p className="text-lg text-gray-900">
-                          정가: {product?.price?.toLocaleString()}원
-                        </p>
-                        <button 
-                          className="absolute -right-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-500 underline"
-                          onClick={() => startEditing('price', product?.price || 0)}
-                        >
-                          수정
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {/* 할인 설정 */}
-                  <div className="border border-gray-200 rounded-lg p-4 mb-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-medium">할인 설정</h4>
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="is-on-sale" 
-                          checked={product.is_on_sale || false}
-                          onChange={async (e) => {
-                            const isOnSale = e.target.checked;
-                            try {
-                              const { error } = await supabase
-                                .from('products')
-                                .update({ 
-                                  is_on_sale: isOnSale,
-                                  ...(isOnSale ? {} : { discount_percentage: 0, discounted_price: null })
-                                })
-                                .eq('id', productId);
-                              
-                              if (error) throw error;
-                              
-                              setProduct(prev => prev ? { 
-                                ...prev, 
-                                is_on_sale: isOnSale,
-                                ...(isOnSale ? {} : { discount_percentage: 0, discounted_price: null })
-                              } : null);
-                              
-                              toast.success(isOnSale ? '할인 모드가 활성화되었습니다.' : '할인 모드가 비활성화되었습니다.');
-                            } catch (error: any) {
-                              toast.error('할인 설정 변경 중 오류가 발생했습니다.');
-                            }
-                          }}
-                          className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                        />
-                        <label htmlFor="is-on-sale" className="ml-2 text-sm">할인 중</label>
+              {/* 모바일 상단 여백 */}
+              <div className="block md:hidden h-4"></div>
+              
+              {/* 제품 정보 콘텐츠 */}
+              <div className="space-y-4 md:space-y-6">
+                {/* 제품 기본 정보 */}
+                <div className="space-y-3 md:space-y-4">
+                  {/* 제품명 - 편집 가능 */}
+                  {editingField === 'product_name' ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && saveEditing('product_name')}
+                        className="w-full text-2xl sm:text-3xl md:text-4xl font-normal text-gray-900 leading-tight bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                        placeholder="제품명을 입력하세요"
+                        autoFocus
+                      />
+                      <div className="flex space-x-2">
+                        <button onClick={() => saveEditing('product_name')} className="text-sm text-green-600 hover:text-green-800">저장</button>
+                        <button onClick={cancelEditing} className="text-sm text-gray-500 hover:text-gray-700">취소</button>
                       </div>
                     </div>
-
-                    {product.is_on_sale && (
-                      <div className="space-y-4">
-                        {/* 할인율 설정 */}
-                        <div className="relative group">
-                          {editingField === 'discount_percentage' ? (
-                            <div>
-                              <label className="block text-xs text-gray-500 mb-1">할인율 (%)</label>
-                              <div className="flex items-center">
-                                <input
-                                  type="number"
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                                  value={editNumberValue}
-                                  onChange={(e) => setEditNumberValue(parseInt(e.target.value) || 0)}
-                                  min="0"
-                                  max="100"
-                                />
-                                <span className="ml-2">%</span>
-                              </div>
-                              <div className="mt-2 flex justify-end">
-                                <button
-                                  className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                                  onClick={async () => {
-                                    const newDiscountPercentage = editNumberValue;
-                                    const newDiscountedPrice = product.price * (1 - newDiscountPercentage / 100);
-                                    
-                                    try {
-                                      const { error } = await supabase
-                                        .from('products')
-                                        .update({ 
-                                          discount_percentage: newDiscountPercentage,
-                                          discounted_price: newDiscountedPrice
-                                        })
-                                        .eq('id', productId);
-                                      
-                                      if (error) throw error;
-                                      
-                                      setProduct(prev => prev ? { 
-                                        ...prev, 
-                                        discount_percentage: newDiscountPercentage,
-                                        discounted_price: newDiscountedPrice
-                                      } : null);
-                                      
-                                      setEditingField(null);
-                                      toast.success('할인율이 저장되었습니다.');
-                                    } catch (error: any) {
-                                      toast.error('할인율 저장 중 오류가 발생했습니다.');
-                                    }
-                                  }}
-                                >
-                                  저장
-                                </button>
-                                <button
-                                  className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                                  onClick={cancelEditing}
-                                >
-                                  취소
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="text-xs text-gray-500">할인율</p>
-                                <p className="text-sm font-medium">{product.discount_percentage || 0}%</p>
-                              </div>
-                              <button 
-                                className="text-xs text-gray-500 underline"
-                                onClick={() => startEditing('discount_percentage', product.discount_percentage || 0)}
-                              >
-                                수정
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 할인가 표시 (자동 계산) */}
-                        <div className="relative group">
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="text-xs text-gray-500">할인가 (자동 계산)</p>
-                              <p className="text-sm font-medium text-red-600">
-                                {product.discounted_price ? `${Math.round(product.discounted_price).toLocaleString()}원` : '할인율 설정 시 자동 계산'}
-                              </p>
-                            </div>
-                            <span className="text-xs text-gray-400">자동</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <h1 
+                      className="text-2xl sm:text-3xl md:text-4xl font-normal text-gray-900 leading-tight cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded"
+                      onClick={() => startEditing('product_name', product?.product_name || '')}
+                    >
+                      {product?.product_name || '제품명'}
+                    </h1>
+                  )}
                   
-                  {/* 제품 설명 인라인 편집 */}
-                  <div className="relative group mb-12">
-                    {product && editingField === 'product_description' ? (
-                      <div>
-                        <textarea
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          rows={10}
-                          placeholder="제품 설명을 입력하세요..."
-                        />
-                        <div className="mt-2 flex justify-end">
-                          <button
-                            className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                            onClick={() => saveEditing('product_description')}
-                          >
-                            저장
-                          </button>
-                          <button
-                            className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                            onClick={cancelEditing}
-                          >
-                            취소
-                          </button>
-                        </div>
+                  {/* 브랜드명 */}
+                  <Link href={`/store/${storeId}`} className="inline-block">
+                    <p className="text-sm text-gray-500 font-normal tracking-wide">
+                      {store?.store_name || '상점명'}
+                    </p>
+                  </Link>
+
+                  {/* 상품번호 */}
+                  <p className="text-xs text-gray-400 tracking-wider font-normal">
+                    상품번호: {productId.slice(-8).toUpperCase()}
+                  </p>
+                  
+                  {/* 제품 설명 - 편집 가능 */}
+                  {editingField === 'product_description' ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        className="w-full text-gray-600 leading-relaxed text-sm font-normal border border-gray-300 rounded p-2 focus:border-black outline-none"
+                        rows={4}
+                        placeholder="제품 설명을 입력하세요"
+                        autoFocus
+                      />
+                      <div className="flex space-x-2">
+                        <button onClick={() => saveEditing('product_description')} className="text-sm text-green-600 hover:text-green-800">저장</button>
+                        <button onClick={cancelEditing} className="text-sm text-gray-500 hover:text-gray-700">취소</button>
                       </div>
-                    ) : (
-                      <>
-                        <div className="prose prose-sm max-w-none">
-                          <div 
-                            className="rich-editor text-gray-600 leading-relaxed text-sm"
-                            dangerouslySetInnerHTML={{ 
-                              __html: DOMPurify.sanitize(product.product_description || '<p className="text-gray-400">제품 설명이 없습니다.</p>')
-                            }}
-                          />
-                        </div>
-                        <button 
-                          className="absolute -right-8 top-1 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-500 underline"
-                          onClick={() => startEditing('product_description', product.product_description || '')}
-                        >
-                          수정
-                        </button>
-                      </>
-                    )}
+                    </div>
+                  ) : (
+                    <div 
+                      className="prose prose-sm max-w-none cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded"
+                      onClick={() => startEditing('product_description', product?.product_description || '')}
+                    >
+                      <div 
+                        dangerouslySetInnerHTML={{ 
+                          __html: product?.product_description ? DOMPurify.sanitize(product.product_description) : '제품 설명을 추가하세요...' 
+                        }}
+                        className="text-gray-600 leading-relaxed text-sm font-normal line-clamp-3 md:line-clamp-none"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* 색상 선택 */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-900">다른 색상</h3>
+                  <div className="flex space-x-3">
+                    <button className="w-8 h-8 rounded-full bg-black border-2 border-gray-300 hover:border-gray-400 transition-colors"></button>
                   </div>
                 </div>
 
-                {/* 제품 세부 정보 아코디언 */}
-                <div className="mb-10 space-y-5">
-                  {/* 재고 설정 */}
-                  <div className="border-t border-gray-200">
-                    <div 
-                      className="flex justify-between items-center py-4 cursor-pointer relative group" 
-                      onClick={() => toggleAccordion('stock-options')}
-                    >
-                      <h3 className="text-sm uppercase tracking-widest font-medium">재고 관리</h3>
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        className={`h-4 w-4 transition-transform ${activeAccordion === 'stock-options' ? 'transform rotate-180' : ''}`} 
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div 
-                      className={`overflow-hidden transition-all ${activeAccordion === 'stock-options' ? 'max-h-96 opacity-100 pt-2 pb-4' : 'max-h-0 opacity-0 py-0'}`}
-                      style={{ transition: 'max-height 0.3s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out' }}
-                    >
-                      <div className="space-y-4">
-                        {product && editingField === 'stock' ? (
-                          <div className="pt-2">
-                            <label htmlFor="stock-edit" className="text-sm text-gray-600">재고 수량:</label>
-                            <div className="mt-1 flex">
-                              <input
-                                type="number"
-                                id="stock-edit"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                                value={editNumberValue}
-                                onChange={(e) => setEditNumberValue(parseInt(e.target.value) || 0)}
-                                min="0"
-                              />
-                              <div className="ml-2 flex">
-                                <button
-                                  className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                                  onClick={() => saveEditing('stock')}
-                                >
-                                  저장
-                                </button>
-                                <button
-                                  className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                                  onClick={cancelEditing}
-                                >
-                                  취소
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex justify-between items-center">
-                            <p className="text-sm">현재 재고: <span className="font-medium">{product.stock}개</span></p>
-                            <button 
-                              className="text-xs text-gray-500 underline"
-                              onClick={() => startEditing('stock', product.stock)}
-                            >
-                              수정
-                            </button>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center">
-                            <input 
-                              type="checkbox" 
-                              id="is-available" 
-                              checked={product.is_available}
-                              onChange={toggleProductAvailability}
-                              className="h-4 w-4 text-black focus:ring-black border-gray-300"
-                            />
-                            <label htmlFor="is-available" className="ml-2 text-sm">판매 중</label>
-                          </div>
+                {/* 가격 및 재고 관리 섹션 */}
+                <div className="space-y-3 md:space-y-4">
+                  {/* 가격 표시 - 편집 가능 */}
+                  <div className="mb-4">
+                    {editingField === 'price' ? (
+                      <div className="space-y-2">
+                        <input
+                          type="number"
+                          value={editNumberValue}
+                          onChange={(e) => setEditNumberValue(Number(e.target.value))}
+                          onKeyDown={(e) => e.key === 'Enter' && saveEditing('price')}
+                          className="text-xl font-medium text-black bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                          placeholder="가격"
+                          autoFocus
+                        />
+                        <div className="flex space-x-2">
+                          <button onClick={() => saveEditing('price')} className="text-sm text-green-600 hover:text-green-800">저장</button>
+                          <button onClick={cancelEditing} className="text-sm text-gray-500 hover:text-gray-700">취소</button>
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <p 
+                        className="text-xl font-medium text-black cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded"
+                        onClick={() => startEditing('price', product?.price || 0)}
+                      >
+                        ₩{product?.price?.toLocaleString() || '0'}
+                      </p>
+                    )}
                   </div>
 
-                  {/* 배송 정보 */}
-                  <div className="border-t border-gray-200">
-                    <div 
-                      className="flex justify-between items-center py-4 cursor-pointer relative group"
-                      onClick={() => toggleAccordion('shipping-info')}
-                    >
-                      <h3 className="text-sm uppercase tracking-widest font-medium">배송 안내</h3>
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        className={`h-4 w-4 transition-transform ${activeAccordion === 'shipping-info' ? 'transform rotate-180' : ''}`}
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div 
-                      className={`overflow-hidden transition-all ${activeAccordion === 'shipping-info' ? 'max-h-96 opacity-100 pt-2 pb-4' : 'max-h-0 opacity-0 py-0'}`}
-                      style={{ transition: 'max-height 0.3s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out' }}
-                    >
-                      <div className="space-y-2 text-sm text-gray-600">
-                        {product && product.shipping_info ? (
-                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.shipping_info.replace(/\n/g, '<br/>')) }} />
-                        ) : (
-                          <p className="text-gray-400">기본 배송 정책이 적용됩니다.</p>
-                        )}
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <p className="text-xs text-gray-400 italic">* 배송 정책은 상점 관리자가 설정한 기본값으로 모든 제품에 적용됩니다.</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  {/* 판매 상태 토글 버튼 */}
+                  <button
+                    onClick={toggleProductAvailability}
+                    className={`w-full flex items-center justify-center py-3 md:py-4 px-4 md:px-6 text-sm font-medium transition-colors ${
+                      product?.is_available
+                        ? 'bg-black text-white hover:bg-gray-900'
+                        : 'bg-gray-300 text-gray-500 hover:bg-gray-400'
+                    }`}
+                  >
+                    <span>{product?.is_available ? '판매 중' : '판매 중지'}</span>
+                  </button>
 
-                  {/* 반품 정책 */}
-                  <div className="border-t border-gray-200">
-                    <div 
-                      className="flex justify-between items-center py-4 cursor-pointer relative group"
-                      onClick={() => toggleAccordion('return-policy')}
-                    >
-                      <h3 className="text-sm uppercase tracking-widest font-medium">반품 정책</h3>
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        className={`h-4 w-4 transition-transform ${activeAccordion === 'return-policy' ? 'transform rotate-180' : ''}`}
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    <div 
-                      className={`overflow-hidden transition-all ${activeAccordion === 'return-policy' ? 'max-h-96 opacity-100 pt-2 pb-4' : 'max-h-0 opacity-0 py-0'}`}
-                      style={{ transition: 'max-height 0.3s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out' }}
-                    >
-                      <div className="space-y-2 text-sm text-gray-600">
-                        {product && product.return_policy ? (
-                          <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.return_policy.replace(/\n/g, '<br/>')) }} />
-                        ) : (
-                          <p className="text-gray-400">기본 반품 정책이 적용됩니다.</p>
-                        )}
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <p className="text-xs text-gray-400 italic">* 반품 정책은 상점 관리자가 설정한 기본값으로 모든 제품에 적용됩니다.</p>
+                  {/* 재고 관리 버튼 */}
+                  <div className="flex space-x-2">
+                    {editingField === 'stock' ? (
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="number"
+                          value={editNumberValue}
+                          onChange={(e) => setEditNumberValue(Number(e.target.value))}
+                          onKeyDown={(e) => e.key === 'Enter' && saveEditing('stock')}
+                          className="w-full py-3 md:py-4 text-sm font-medium border border-black text-black text-center bg-transparent focus:outline-none"
+                          placeholder="재고"
+                          autoFocus
+                        />
+                        <div className="flex space-x-2">
+                          <button onClick={() => saveEditing('stock')} className="text-sm text-green-600 hover:text-green-800">저장</button>
+                          <button onClick={cancelEditing} className="text-sm text-gray-500 hover:text-gray-700">취소</button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                  
-                  {/* 재질/소재 정보 */}
-                  <div className="border-t border-gray-200">
-                    <div 
-                      className="flex justify-between items-center py-4 cursor-pointer relative group"
-                      onClick={() => toggleAccordion('material-info')}
-                    >
-                      <h3 className="text-sm uppercase tracking-widest font-medium">재질/소재</h3>
-                      <button 
-                        className="absolute -right-8 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-500 underline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (product) {
-                            startEditing('material', product.material || '', 'material-info');
-                          }
-                        }}
+                    ) : (
+                      <button
+                        onClick={() => startEditing('stock', product?.stock || 0)}
+                        className="flex-1 py-3 md:py-4 text-sm font-medium border border-black text-black hover:bg-gray-50 transition-colors flex items-center justify-center"
                       >
-                        수정
+                        재고: {product?.stock || 0}개
                       </button>
+                    )}
+                  </div>
+
+                  {/* 배송 안내 */}
+                  <div className="text-xs text-gray-500 text-center py-1">
+                    <p>발송일 기준 1-2일 내 배송 예정</p>
+                  </div>
+
+                  {/* 관리 버튼 */}
+                  <div className="flex justify-center pt-1 md:pt-2">
+                    <button
+                      onClick={() => toggleDeleteConfirm(true)}
+                      className="flex items-center text-xs md:text-sm font-medium text-gray-600 hover:text-red-600 transition-colors py-2"
+                    >
                       <svg 
                         xmlns="http://www.w3.org/2000/svg" 
-                        className={`h-4 w-4 transition-transform ${activeAccordion === 'material-info' ? 'transform rotate-180' : ''}`}
-                        fill="none" 
+                        className="h-4 md:h-5 w-4 md:w-5 mr-2 text-gray-400" 
                         viewBox="0 0 24 24" 
                         stroke="currentColor"
+                        fill="none"
+                        strokeWidth={1}
                       >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 9l-7 7-7-7" />
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" 
+                        />
                       </svg>
-                    </div>
-                    <div 
-                      className={`overflow-hidden transition-all ${activeAccordion === 'material-info' ? 'max-h-96 opacity-100 pt-2 pb-4' : 'max-h-0 opacity-0 py-0'}`}
-                      style={{ transition: 'max-height 0.3s ease-in-out, opacity 0.2s ease-in-out, padding 0.2s ease-in-out' }}
+                      제품 삭제
+                    </button>
+                  </div>
+                </div>
+
+                {/* 탭 메뉴 */}
+                <div className="border-b border-gray-200 mt-6 md:mt-8">
+                  <div className="flex space-x-4 md:space-x-8 overflow-x-auto hide-scrollbar">
+                    <button 
+                      onClick={() => setActiveTab('basic')}
+                      className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                        activeTab === 'basic' 
+                          ? 'text-gray-900 border-b-2 border-black' 
+                          : 'text-gray-500 hover:text-gray-900'
+                      }`}
                     >
-                      <div className="space-y-2 text-sm text-gray-600">
-                        {product && editingField === 'material' ? (
-                          <div>
-                            <div className="mb-2 flex justify-end">
-                              {loadingTemplates ? (
-                                <span className="text-xs text-gray-500">템플릿 로딩 중...</span>
-                              ) : (
-                                <select 
-                                  className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs mr-1"
-                                  onChange={(e) => {
-                                    const selectedId = e.target.value;
-                                    if (selectedId) {
-                                      const template = materialTemplates.find(t => t.id === selectedId);
-                                      if (template) {
-                                        applyTemplate(template.content);
-                                      }
-                                    }
-                                  }}
-                                  value=""
-                                >
-                                  <option value="">템플릿 선택</option>
-                                  {materialTemplates.map(template => (
-                                    <option key={template.id} value={template.id}>
-                                      {template.name}{template.is_default ? ' (기본)' : ''}
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                            <textarea
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      기본 정보
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('details')}
+                      className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                        activeTab === 'details' 
+                          ? 'text-gray-900 border-b-2 border-black' 
+                          : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      상세 정보
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('policy')}
+                      className={`py-3 text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                        activeTab === 'policy' 
+                          ? 'text-gray-900 border-b-2 border-black' 
+                          : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                    >
+                      정책
+                    </button>
+                  </div>
+                </div>
+
+                {/* 탭 컨텐츠 */}
+                <div className="py-2 md:py-3">
+                  {activeTab === 'basic' && (
+                    <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-3">
+                      {/* 소재 */}
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">소재:</span>
+                        {editingField === 'material' ? (
+                          <div className="flex-1 ml-2 space-y-1">
+                            <input
+                              type="text"
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
-                              rows={4}
-                              placeholder="재질/소재 정보를 입력하세요..."
+                              onKeyDown={(e) => e.key === 'Enter' && saveEditing('material')}
+                              className="w-full text-right bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                              placeholder="소재"
+                              autoFocus
                             />
-                            <div className="mt-2 flex justify-end">
-                              <button
-                                className="px-3 py-1 bg-black text-white rounded-md text-sm mr-1"
-                                onClick={() => saveEditing('material')}
-                              >
-                                저장
-                              </button>
-                              <button
-                                className="px-3 py-1 border border-gray-300 rounded-md text-sm"
-                                onClick={cancelEditing}
-                              >
-                                취소
-                              </button>
+                            <div className="flex justify-end space-x-2">
+                              <button onClick={() => saveEditing('material')} className="text-xs text-green-600">저장</button>
+                              <button onClick={cancelEditing} className="text-xs text-gray-500">취소</button>
                             </div>
                           </div>
                         ) : (
-                          <div className="relative">
-                            {product && product.material ? (
-                              <p>{product.material}</p>
-                            ) : (
-                              <p className="text-gray-400">재질/소재 정보가 없습니다. '수정' 버튼을 클릭하여 추가하세요.</p>
-                            )}
-                            <button 
-                              className="absolute top-0 right-0 text-xs text-gray-500 underline"
-                              onClick={() => startEditing('material', product?.material || '')}
-                            >
-                              수정
-                            </button>
+                          <span 
+                            className="cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => startEditing('material', product?.material || '')}
+                          >
+                            {product?.material || '추가하세요'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* 무게 */}
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">무게:</span>
+                        {editingField === 'weight' ? (
+                          <div className="flex-1 ml-2 space-y-1">
+                            <input
+                              type="number"
+                              value={editNumberValue}
+                              onChange={(e) => setEditNumberValue(Number(e.target.value))}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEditing('weight')}
+                              className="w-full text-right bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                              placeholder="무게(g)"
+                              autoFocus
+                            />
+                            <div className="flex justify-end space-x-2">
+                              <button onClick={() => saveEditing('weight')} className="text-xs text-green-600">저장</button>
+                              <button onClick={cancelEditing} className="text-xs text-gray-500">취소</button>
+                            </div>
                           </div>
+                        ) : (
+                          <span 
+                            className="cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => startEditing('weight', product?.weight || 0)}
+                          >
+                            {product?.weight ? `${product.weight}g` : '추가하세요'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* 크기 */}
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">크기:</span>
+                        {editingField === 'dimensions' ? (
+                          <div className="flex-1 ml-2 space-y-1">
+                            <input
+                              type="text"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEditing('dimensions')}
+                              className="w-full text-right bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                              placeholder="크기"
+                              autoFocus
+                            />
+                            <div className="flex justify-end space-x-2">
+                              <button onClick={() => saveEditing('dimensions')} className="text-xs text-green-600">저장</button>
+                              <button onClick={cancelEditing} className="text-xs text-gray-500">취소</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span 
+                            className="cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => startEditing('dimensions', product?.dimensions || '')}
+                          >
+                            {product?.dimensions || '추가하세요'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* 원산지 */}
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">원산지:</span>
+                        {editingField === 'origin' ? (
+                          <div className="flex-1 ml-2 space-y-1">
+                            <input
+                              type="text"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEditing('origin')}
+                              className="w-full text-right bg-transparent border-b border-gray-300 focus:border-black outline-none"
+                              placeholder="원산지"
+                              autoFocus
+                            />
+                            <div className="flex justify-end space-x-2">
+                              <button onClick={() => saveEditing('origin')} className="text-xs text-green-600">저장</button>
+                              <button onClick={cancelEditing} className="text-xs text-gray-500">취소</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span 
+                            className="cursor-pointer hover:bg-gray-50 p-1 rounded"
+                            onClick={() => startEditing('origin', product?.origin || '')}
+                          >
+                            {product?.origin || '추가하세요'}
+                          </span>
                         )}
                       </div>
                     </div>
-                  </div>
+                  )}
+                  
+                  {activeTab === 'details' && (
+                    <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-2">
+                      <p className="leading-relaxed">2025년 가을에 새롭게 선보이는 소프트 {product?.product_name || '제품'}은 모던함과 유행을 타지 않는 우아함을 결합한 유명한 구조가 특징입니다. 고급스러운 소재와 정교한 마감으로 제작된 이 제품은 구조적으로 복잡하지만 우아한 CD 시그니처 클래스프가 특징적인 훌륭한 액세서리 라인을 완성하여 일상에서 제이아 스타일링 경험을 선사합니다.</p>
+                      <button className="text-xs md:text-sm font-medium text-gray-900 underline hover:no-underline transition-all mt-2 md:mt-3">
+                        자세히 보기
+                      </button>
+                    </div>
+                  )}
+                  
+                  {activeTab === 'policy' && (
+                    <div className="text-xs md:text-sm font-normal text-gray-600 leading-snug space-y-4">
+                      {/* 배송 정책 */}
+                      <div>
+                        <h4 className="font-medium text-gray-900 mb-2">배송 및 반품 정책</h4>
+                        <div className="space-y-2">
+                          <p>• 평일 오후 2시 이전 주문 시 당일 출고</p>
+                          <p>• 주문 후 평균 2-3일 이내 수령</p>
+                          <p>• 전국 무료 배송</p>
+                          <p>• 제주도 및 도서산간 지역 추가 배송비 발생</p>
+                          <p>• 상품 수령 후 7일 이내 교환/반품 가능</p>
+                          <p>• 고객 변심에 의한 교환/반품 시 왕복 배송비 고객 부담</p>
+                          <p>• 상품 불량/오배송의 경우 전액 판매자 부담</p>
+                          <p>• 착용, 사용 흔적이 있는 상품은 교환/반품 불가</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

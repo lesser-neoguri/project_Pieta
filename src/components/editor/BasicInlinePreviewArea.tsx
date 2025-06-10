@@ -78,11 +78,11 @@ export const getContainerStyles = (design: any, sidebarOpen: boolean = false): R
   const maxWidthPercent = design?.container_max_width ?? 85;
   const paddingPercent = design?.container_padding ?? 4;
   
-  // 사이드바 너비 (20rem = 320px)
-  const sidebarWidth = sidebarOpen ? 20 : 0;
+  // 사이드바 너비 (24rem = 384px)
+  const sidebarWidth = sidebarOpen ? 384 : 0;
   
-  // 실제 사용 가능한 컨텐츠 영역의 너비
-  const availableWidth = `calc(100vw - ${sidebarWidth}rem)`;
+  // 실제 사용 가능한 컨텐츠 영역의 너비 (사이드바 제외)
+  const availableWidth = `calc(100vw - ${sidebarWidth}px)`;
   
   // 컨텐츠 영역 기준 퍼센트 계산
   const containerWidth = `calc(${availableWidth} * ${maxWidthPercent} / 100)`;
@@ -98,6 +98,7 @@ export const getContainerStyles = (design: any, sidebarOpen: boolean = false): R
     transform: 'translateX(-50%)',
     marginLeft: 0,
     marginRight: 0,
+    transition: 'width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), padding 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
   };
 };
 
@@ -114,9 +115,10 @@ export interface StoreBlockBase {
   background_color?: string;
   text_alignment?: TextAlignment;
   block_width?: BlockWidth; // 블록 너비 설정
-  height?: number; // 픽셀 단위 높이
+  height?: number; // 높이 값
   min_height?: number; // 최소 높이
   max_height?: number; // 최대 높이
+  height_unit?: 'px' | 'vh' | 'visible'; // 높이 단위 선택
 }
 
 export interface TextBlockData extends StoreBlockBase {
@@ -166,12 +168,14 @@ export interface ListBlockData extends StoreBlockBase {
   list_style?: 'horizontal' | 'vertical' | 'card';
   show_description?: boolean;
   show_price_prominent?: boolean;
+  max_products?: number;
 }
 
 export interface MasonryBlockData extends StoreBlockBase {
   type: 'masonry';
   masonry_columns?: number;
   masonry_min_height?: 'small' | 'medium' | 'large'; // 충돌 방지를 위해 이름 변경
+  max_products?: number;
 }
 
 export type StoreBlock = 
@@ -246,6 +250,7 @@ export const convertRowLayoutsToStoreBlocks = (rowLayouts: any, isClient: boolea
         height: layout.height,
         min_height: layout.min_height,
         max_height: layout.max_height,
+        height_unit: layout.height_unit || 'px'
       };
 
       // 타입별로 특화된 속성 추가
@@ -364,10 +369,26 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState>({ isDragging: false, draggedBlockStableId: null });
   const [insertMenu, setInsertMenu] = useState<BlockInsertMenu>({ isVisible: false, position: -1, insertType: 'start' });
+  const [showDeleteZone, setShowDeleteZone] = useState(false);
+  const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
+  const [hoveredButton, setHoveredButton] = useState<{blockId: string, type: 'drag' | 'resize' | 'moveUp' | 'moveDown'} | null>(null);
   
   // 클라이언트 마운트 감지
   useEffect(() => {
     setIsClient(true);
+  }, []);
+
+  // 전역 마우스 이벤트로 드래그 상태 관리
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setShowDeleteZone(false);
+      setDraggedBlockId(null);
+    };
+
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
   }, []);
 
   // 블록 변환 - 클라이언트 상태를 고려하고 기본값 적용
@@ -447,6 +468,10 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
 
   // 드래그 종료 핸들러 - 애니메이션 최적화
   const handleDragEnd = useCallback((result: DropResult) => {
+    // 삭제 영역 숨기기
+    setShowDeleteZone(false);
+    setDraggedBlockId(null);
+    
     // 드롭 실패 시 drag state만 리셋
     if (!result.destination) {
       setDragState({
@@ -966,9 +991,11 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
                                       className={`
-                                        relative transition-all duration-300 ease-out
+                                        relative transition-all duration-300 ease-out mb-6
                                         ${isDragging ? 'z-50' : ''}
                                         ${!isDropAnimating && dragState.isDragging && dragState.draggedBlockStableId === block.stableId ? 'transform translate-y-4' : ''}
+                                        ${selectedBlockId === block.id ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50/30' : 'bg-white hover:bg-gray-50/50'}
+                                        border border-gray-200 hover:border-gray-300 rounded-lg shadow-sm hover:shadow-md p-4
                                       `}
                                       style={{
                                         ...provided.draggableProps.style,
@@ -982,21 +1009,103 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                       }}
                                     >
 
-                                      {/* 드래그 핸들 - 오른쪽 하단으로 이동 */}
+                                      {/* 개선된 드래그 핸들 - 오른쪽 끝 */}
                                       <div 
                                         {...provided.dragHandleProps}
-                                        className="absolute bottom-2 right-12 w-6 h-4 opacity-100 hover:opacity-100 transition-all duration-300 cursor-move z-30"
+                                        className="absolute bottom-2 right-2 w-8 h-8 opacity-80 hover:opacity-100 transition-all duration-300 cursor-move z-30"
+                                        onMouseDown={() => {
+                                          setShowDeleteZone(true);
+                                          setDraggedBlockId(block.id);
+                                        }}
+                                        onMouseUp={() => {
+                                          setShowDeleteZone(false);
+                                          setDraggedBlockId(null);
+                                        }}
+                                        onMouseEnter={() => setHoveredButton({blockId: block.id, type: 'drag'})}
+                                        onMouseLeave={() => setHoveredButton(null)}
                                       >
-                                                                                  <div className="w-full h-full bg-black hover:bg-gray-800 flex items-center justify-center border border-black hover:border-gray-800 transition-all duration-300">
-                                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path>
+                                        <div className="w-full h-full bg-gray-900 hover:bg-black shadow-lg flex items-center justify-center border border-gray-300 hover:border-gray-100 transition-all duration-300 transform hover:scale-105">
+                                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                                           </svg>
                                         </div>
+                                        {/* 개별 툴팁 */}
+                                        {hoveredButton?.blockId === block.id && hoveredButton?.type === 'drag' && (
+                                          <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap pointer-events-none z-[200] shadow-lg">
+                                            드래그하여 이동
+                                          </div>
+                                        )}
                                       </div>
+
+                                      {/* 위로 올리기 버튼 */}
+                                      {!readOnly && !dragState.isDragging && (
+                                        <div 
+                                          className={`absolute bottom-2 right-11 w-8 h-8 opacity-80 hover:opacity-100 transition-all duration-300 z-30 ${
+                                            block.position > 0 ? 'cursor-pointer' : 'cursor-not-allowed'
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (block.position > 0) {
+                                              handleMoveBlock(block.id, 'up');
+                                            }
+                                          }}
+                                          onMouseEnter={() => setHoveredButton({blockId: block.id, type: 'moveUp'})}
+                                          onMouseLeave={() => setHoveredButton(null)}
+                                        >
+                                          <div className={`w-full h-full shadow-lg flex items-center justify-center border transition-all duration-300 transform hover:scale-105 ${
+                                            block.position > 0 
+                                              ? 'bg-gray-900 hover:bg-black border-gray-300 hover:border-gray-100' 
+                                              : 'bg-gray-500 border-gray-400 cursor-not-allowed'
+                                          }`}>
+                                            <svg className={`w-4 h-4 ${block.position > 0 ? 'text-white' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                            </svg>
+                                          </div>
+                                          {/* 개별 툴팁 */}
+                                          {hoveredButton?.blockId === block.id && hoveredButton?.type === 'moveUp' && (
+                                            <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap pointer-events-none z-[200] shadow-lg">
+                                              {block.position > 0 ? '위로 올리기' : '최상단 블록'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* 아래로 내리기 버튼 */}
+                                      {!readOnly && !dragState.isDragging && (
+                                        <div 
+                                          className={`absolute bottom-2 right-20 w-8 h-8 opacity-80 hover:opacity-100 transition-all duration-300 z-30 ${
+                                            block.position < blocks.length - 1 ? 'cursor-pointer' : 'cursor-not-allowed'
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (block.position < blocks.length - 1) {
+                                              handleMoveBlock(block.id, 'down');
+                                            }
+                                          }}
+                                          onMouseEnter={() => setHoveredButton({blockId: block.id, type: 'moveDown'})}
+                                          onMouseLeave={() => setHoveredButton(null)}
+                                        >
+                                          <div className={`w-full h-full shadow-lg flex items-center justify-center border transition-all duration-300 transform hover:scale-105 ${
+                                            block.position < blocks.length - 1 
+                                              ? 'bg-gray-900 hover:bg-black border-gray-300 hover:border-gray-100' 
+                                              : 'bg-gray-500 border-gray-400 cursor-not-allowed'
+                                          }`}>
+                                            <svg className={`w-4 h-4 ${block.position < blocks.length - 1 ? 'text-white' : 'text-gray-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                          </div>
+                                          {/* 개별 툴팁 */}
+                                          {hoveredButton?.blockId === block.id && hoveredButton?.type === 'moveDown' && (
+                                            <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap pointer-events-none z-[200] shadow-lg">
+                                              {block.position < blocks.length - 1 ? '아래로 내리기' : '최하단 블록'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
 
                                       {/* 블록 콘텐츠 */}
                                       <div className={`
-                                        transition-all duration-300 ease-out
+                                        transition-all duration-300 ease-out -m-4
                                         ${dragState.isDragging && !isDragging ? 'opacity-60' : ''}
                                       `}>
                                         {/* 모든 블록 타입에 대해 full-width 처리 */}
@@ -1051,48 +1160,54 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
                                 }}
                               </Draggable>
                               
-                              {/* 높이 조절 핸들 - 리스트와 Masonry 블록 제외 */}
-                              {!readOnly && !['list', 'masonry'].includes(block.type) && (
-                                <div
-                                  className="absolute bottom-2 right-4 opacity-100 hover:opacity-100 transition-all duration-300 z-50"
-                                  style={{ pointerEvents: 'auto' }}
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    
-                                    const startY = e.clientY;
-                                    const startHeight = block.height || 300;
-                                    
-                                    const handleMouseMove = (moveEvent: MouseEvent) => {
-                                      moveEvent.preventDefault();
-                                      moveEvent.stopPropagation();
-                                      
-                                      const deltaY = moveEvent.clientY - startY;
-                                      const minHeight = block.min_height || 100;
-                                      const maxHeight = block.max_height || 9999; // 최대 제한 대폭 완화
-                                      const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
-                                      
-                                      handleBlockUpdate(block.id, { height: newHeight });
-                                    };
-                                    
-                                    const handleMouseUp = () => {
-                                      document.removeEventListener('mousemove', handleMouseMove);
-                                      document.removeEventListener('mouseup', handleMouseUp);
-                                    };
-                                    
-                                    document.addEventListener('mousemove', handleMouseMove);
-                                    document.addEventListener('mouseup', handleMouseUp);
-                                  }}
-                                >
-                                  <div className="w-6 h-4 bg-black hover:bg-gray-800 flex items-center justify-center cursor-row-resize transition-all duration-300 border border-black hover:border-gray-800">
-                                    <div className="flex space-x-0.5">
-                                      <div className="w-0.5 h-0.5 bg-white"></div>
-                                      <div className="w-0.5 h-0.5 bg-white"></div>
-                                      <div className="w-0.5 h-0.5 bg-white"></div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                                            {/* 개선된 높이 조절 핸들 - 리스트와 Masonry 블록 제외, 드래그 중이 아닐 때만 표시 */}
+              {!readOnly && !dragState.isDragging && !['list', 'masonry'].includes(block.type) && (
+                <div
+                  className="absolute bottom-2 right-29 opacity-80 hover:opacity-100 transition-all duration-300 z-50"
+                  style={{ pointerEvents: 'auto' }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const startY = e.clientY;
+                    const startHeight = block.height || 300;
+                    
+                    const handleMouseMove = (moveEvent: MouseEvent) => {
+                      moveEvent.preventDefault();
+                      moveEvent.stopPropagation();
+                      
+                      const deltaY = moveEvent.clientY - startY;
+                      const minHeight = block.min_height || 100;
+                      const maxHeight = block.max_height || 9999;
+                      const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
+                      
+                      handleBlockUpdate(block.id, { height: newHeight });
+                    };
+                    
+                    const handleMouseUp = () => {
+                      document.removeEventListener('mousemove', handleMouseMove);
+                      document.removeEventListener('mouseup', handleMouseUp);
+                    };
+                    
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                  }}
+                  onMouseEnter={() => setHoveredButton({blockId: block.id, type: 'resize'})}
+                  onMouseLeave={() => setHoveredButton(null)}
+                >
+                  <div className="w-8 h-8 bg-gray-900 hover:bg-black shadow-lg flex items-center justify-center cursor-row-resize transition-all duration-300 border border-gray-300 hover:border-gray-100 transform hover:scale-105">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                    </svg>
+                  </div>
+                  {/* 개별 툴팁 */}
+                  {hoveredButton?.blockId === block.id && hoveredButton?.type === 'resize' && (
+                    <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap pointer-events-none z-[200] shadow-lg">
+                      높이 조절
+                    </div>
+                  )}
+                </div>
+              )}
                             </div>
                           )}
                           
@@ -1155,6 +1270,83 @@ export const BasicInlinePreviewArea: React.FC<InlinePreviewAreaProps> = ({
             )}
           </Droppable>
         </DragDropContext>
+
+        {/* 드래그 삭제 영역 */}
+        {showDeleteZone && draggedBlockId && (
+          <div className="fixed inset-0 z-50 pointer-events-none">
+            {/* 고급스러운 삭제 영역 - 화면 하단 중앙 */}
+            <div 
+              className="absolute bottom-8 left-1/2 transform -translate-x-1/2 pointer-events-auto"
+              onMouseEnter={() => {
+                // 드래그된 블록이 삭제 영역에 들어왔을 때
+              }}
+              onMouseUp={() => {
+                // 삭제 실행
+                if (draggedBlockId) {
+                  const updatedBlocks = blocks
+                    .filter(block => block.id !== draggedBlockId)
+                    .map((block, index) => ({
+                      ...block,
+                      id: `block-${index}`,
+                      position: index
+                    }));
+                  
+                  const newRowLayouts = convertStoreBlocksToRowLayouts(updatedBlocks);
+                  onDesignUpdate({
+                    ...design,
+                    row_layouts: newRowLayouts
+                  });
+                  
+                  setShowDeleteZone(false);
+                  setDraggedBlockId(null);
+                }
+              }}
+            >
+              {/* 메인 삭제 영역 */}
+              <div className="relative">
+                {/* 외부 링 효과 */}
+                <div className="absolute inset-0 w-24 h-24 border-2 border-red-500 opacity-30 animate-ping"></div>
+                <div className="absolute inset-0 w-24 h-24 border border-red-400 opacity-40"></div>
+                
+                {/* 메인 삭제 버튼 */}
+                <div className="relative w-24 h-24 bg-gradient-to-br from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 flex items-center justify-center shadow-2xl transform hover:scale-105 transition-all duration-300 border border-red-400 backdrop-blur-sm">
+                  {/* 내부 그림자 효과 */}
+                  <div className="absolute inset-1 bg-gradient-to-br from-red-400 to-transparent opacity-30"></div>
+                  
+                  {/* 쓰레기통 아이콘 */}
+                  <svg className="w-12 h-12 text-white relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  
+                  {/* 하이라이트 효과 */}
+                  <div className="absolute top-2 left-2 right-2 h-1 bg-white opacity-20 blur-sm"></div>
+                </div>
+              </div>
+              
+              {/* 고급스러운 안내 텍스트 */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-6 text-center">
+                <div className="bg-gray-900 bg-opacity-95 backdrop-blur-md text-white px-6 py-3 border border-gray-700 shadow-xl">
+                  <div className="text-sm font-medium tracking-wide">DROP TO DELETE</div>
+                  <div className="text-xs opacity-75 mt-1 font-light">블록이 영구적으로 제거됩니다</div>
+                </div>
+                {/* 화살표 */}
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"></div>
+              </div>
+            </div>
+            
+            {/* 고급스러운 취소 안내 */}
+            <div className="absolute top-8 left-1/2 transform -translate-x-1/2">
+              <div className="bg-gray-900 bg-opacity-95 backdrop-blur-md text-white px-6 py-3 border border-gray-700 shadow-xl">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-sm font-light tracking-wide">드래그를 중단하면 취소됩니다</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1200,14 +1392,17 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
 }) => {
   // 높이 조절 핸들러
   const handleResize = useCallback((deltaY: number) => {
-    const currentHeight = block.height || 300; // 기본 높이
-    const minHeight = block.min_height || 100; // 최소 높이
-    const maxHeight = block.max_height || 9999; // 최대 제한 대폭 완화
+    const isVhOrVisible = block.height_unit === 'vh' || block.height_unit === 'visible';
+    const currentHeight = block.height || (isVhOrVisible ? 50 : 300); // 기본 높이
+    const minHeight = isVhOrVisible ? 10 : (block.min_height || 100); // 최소 높이
+    const maxHeight = isVhOrVisible ? 100 : (block.max_height || 9999); // 최대 높이
     
-    const newHeight = Math.max(minHeight, Math.min(maxHeight, currentHeight + deltaY));
+    // vh나 visible 모드에서는 더 작은 단위로 조절
+    const adjustedDelta = isVhOrVisible ? Math.round(deltaY / 10) : deltaY;
+    const newHeight = Math.max(minHeight, Math.min(maxHeight, currentHeight + adjustedDelta));
     
     onUpdate(block.id, { height: newHeight });
-  }, [block.height, block.min_height, block.max_height, block.id, onUpdate]);
+  }, [block.height, block.height_unit, block.min_height, block.max_height, block.id, onUpdate]);
 
   // 높이 조절이 가능한 블록 타입인지 확인 - 모든 블록 타입에 적용
   const isResizable = true;
@@ -1271,16 +1466,15 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
         return <BasicFeaturedRenderer block={block} />;
 
       case 'list':
-        return (
-          <div className="bg-gray-100 h-64 flex items-center justify-center">
-            <span className="text-gray-500">리스트 블록</span>
-          </div>
-        );
+        return <BasicListRenderer block={block} products={products} />;
+
+      case 'masonry':
+        return <BasicMasonryRenderer block={block} products={products} />;
 
       default:
         return (
           <div className="bg-gray-50 p-8 text-center text-gray-500">
-            {block.type} 블록
+            알 수 없는 블록
           </div>
         );
     }
@@ -1297,61 +1491,9 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
-      {/* 블록 조작 툴바 - 읽기 전용 모드가 아니고 드래그 중이 아닐 때만 표시 */}
-      {!readOnly && isSelected && !isDragging && (
-        <div className="absolute top-2 left-2 flex items-center space-x-1 bg-gray-900 text-white px-4 py-2 z-20 shadow-xl transition-all duration-300 rounded">
-          <span className="text-xs font-light tracking-wider uppercase mr-4">
-            {getBlockTypeLabel(block.type)} #{block.position + 1}
-          </span>
-          
-          {/* 위로 이동 */}
-          <button
-            onClick={handleMoveUp}
-            disabled={!canMoveUp}
-            className="p-2 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Move Up"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-            </svg>
-          </button>
-          
-          {/* 아래로 이동 */}
-          <button
-            onClick={handleMoveDown}
-            disabled={!canMoveDown}
-            className="p-2 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Move Down"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          
-          {/* 삭제 */}
-          <button
-            onClick={handleDelete}
-            className="p-2 hover:bg-red-900 transition-colors"
-            title="Delete"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-          </button>
-        </div>
-      )}
+      {/* 블록 조작 툴바 제거됨 */}
 
-      {/* 마우스 오버 힌트 - 읽기 전용이 아니고 드래그 중이 아니고 선택되지 않았을 때만 표시 */}
-      {!readOnly && !isSelected && !isDragging && (
-        <div className="absolute top-2 left-2 px-3 py-1 bg-gray-900 text-white text-xs opacity-0 group-hover:opacity-100 transition-all duration-300 z-10 rounded">
-          <span className="font-light tracking-wide">
-            {block.type === 'grid' 
-              ? 'Drag to reorder • Click to select • Edit in Design Studio' 
-              : 'Drag to reorder • Click to select • Double-click to edit'
-            }
-          </span>
-        </div>
-      )}
+
 
       {/* 드래그 중 표시 - 읽기 전용이 아닐 때만 표시 */}
       {!readOnly && isDragging && (
@@ -1392,9 +1534,18 @@ const BasicInlineEditableBlock: React.FC<BasicInlineEditableBlockProps> = ({
         `}
         style={{
           // 텍스트 블록만 부모에서 높이 적용, 다른 블록은 자체 렌더러에서 처리
-          height: (block.type === 'text' && block.height) ? `${block.height}px` : undefined,
-          minHeight: (block.type === 'text' && block.height) ? `${block.height}px` : undefined,
-          maxHeight: (block.type === 'text' && block.height) ? `${block.height}px` : undefined
+          height: (block.type === 'text' && block.height) ? 
+            block.height_unit === 'visible' ? 
+              `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바(64px)를 제외한 보이는 영역의 퍼센트
+              `${block.height}${block.height_unit || 'px'}` : undefined,
+          minHeight: (block.type === 'text' && block.height) ? 
+            block.height_unit === 'visible' ? 
+              `calc((100vh - 64px) * ${block.height} / 100)` :
+              `${block.height}${block.height_unit || 'px'}` : undefined,
+          maxHeight: (block.type === 'text' && block.height) ? 
+            block.height_unit === 'visible' ? 
+              `calc((100vh - 64px) * ${block.height} / 100)` :
+              `${block.height}${block.height_unit || 'px'}` : undefined
         }}
       >
         {renderBlockContent()}
@@ -1681,6 +1832,120 @@ const BasicTextEditor: React.FC<{
   );
 };
 
+// 기본 리스트 렌더러
+const BasicListRenderer: React.FC<{
+  block: StoreBlock;
+  products: any[];
+}> = ({ block, products }) => {
+  if (!isListBlock(block)) return null;
+  
+  const listRef = useRef<HTMLDivElement>(null);
+  const maxProducts = block.max_products || 5;
+  
+  // max_products가 0이면 모든 제품 표시
+  const actualMaxProducts = maxProducts === 0 ? products.length + 1 : maxProducts;
+  
+  // 높이가 설정된 경우 DOM에 직접 적용
+  useEffect(() => {
+    if (listRef.current && block.height) {
+      const heightValue = block.height_unit === 'visible' ? 
+        `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바를 제외한 보이는 영역의 퍼센트
+        `${block.height}${block.height_unit || 'px'}`;
+      listRef.current.style.height = heightValue;
+      listRef.current.style.minHeight = heightValue;
+      listRef.current.style.maxHeight = heightValue;
+    }
+  }, [block.height, block.height_unit]);
+  
+  return (
+    <div 
+      ref={listRef}
+      className="space-y-4"
+      style={{
+        overflow: block.height ? 'hidden' : 'visible'
+      }}
+    >
+      {/* 제품 등록 플레이스홀더 */}
+      <div className="flex items-center p-4 bg-gray-100 rounded-lg">
+        <div className="w-16 h-16 bg-gray-200 rounded mr-4 flex items-center justify-center">
+          <span className="text-xs text-gray-500">+</span>
+        </div>
+        <div>
+          <h3 className="text-sm font-medium text-gray-500">제품 추가</h3>
+          <p className="text-xs text-gray-400">새 제품을 등록하세요</p>
+        </div>
+      </div>
+      
+      {/* 실제 제품들 */}
+      {products.slice(0, Math.min(actualMaxProducts - 1, products.length)).map((product, index) => (
+        <div key={product.id || index} className="flex items-center p-4 bg-white border rounded-lg">
+          <div className="w-16 h-16 bg-gray-200 rounded mr-4"></div>
+          <div className="flex-1">
+            <h3 className="text-sm font-medium truncate">{product.product_name}</h3>
+            <p className="text-xs text-gray-600">₩{product.price?.toLocaleString()}</p>
+            {block.show_description && product.description && (
+              <p className="text-xs text-gray-500 mt-1 truncate">{product.description}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// 기본 메이슨리 렌더러
+const BasicMasonryRenderer: React.FC<{
+  block: StoreBlock;
+  products: any[];
+}> = ({ block, products }) => {
+  if (!isMasonryBlock(block)) return null;
+  
+  const masonryRef = useRef<HTMLDivElement>(null);
+  const columns = block.masonry_columns || 3;
+  const maxProducts = block.max_products || 9;
+  
+  // max_products가 0이면 모든 제품 표시
+  const actualMaxProducts = maxProducts === 0 ? products.length + 1 : maxProducts;
+  
+  // 높이가 설정된 경우 DOM에 직접 적용
+  useEffect(() => {
+    if (masonryRef.current && block.height) {
+      const heightValue = block.height_unit === 'visible' ? 
+        `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바를 제외한 보이는 영역의 퍼센트
+        `${block.height}${block.height_unit || 'px'}`;
+      masonryRef.current.style.height = heightValue;
+      masonryRef.current.style.minHeight = heightValue;
+      masonryRef.current.style.maxHeight = heightValue;
+    }
+  }, [block.height, block.height_unit]);
+  
+  return (
+    <div 
+      ref={masonryRef}
+      className={`columns-1 sm:columns-2 md:columns-${Math.min(columns, 4)} gap-4`}
+      style={{
+        overflow: block.height ? 'hidden' : 'visible'
+      }}
+    >
+      {/* 제품 등록 플레이스홀더 */}
+      <div className="break-inside-avoid mb-4 bg-gray-100 p-4 rounded-lg">
+        <div className="aspect-square bg-gray-200 rounded mb-2 flex items-center justify-center">
+          <span className="text-gray-500 text-sm">+ 제품 추가</span>
+        </div>
+      </div>
+      
+      {/* 실제 제품들 */}
+      {products.slice(0, Math.min(actualMaxProducts - 1, products.length)).map((product, index) => (
+        <div key={product.id || index} className="break-inside-avoid mb-4 bg-white border rounded-lg p-4">
+          <div className={`${index % 3 === 0 ? 'aspect-square' : index % 3 === 1 ? 'aspect-[4/5]' : 'aspect-[3/4]'} bg-gray-200 rounded mb-2`}></div>
+          <h3 className="text-sm font-medium truncate">{product.product_name}</h3>
+          <p className="text-xs text-gray-600">₩{product.price?.toLocaleString()}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // 기본 제품 그리드
 const BasicProductGrid: React.FC<{
   block: StoreBlock;
@@ -1688,6 +1953,7 @@ const BasicProductGrid: React.FC<{
 }> = ({ block, products }) => {
   if (!isGridBlock(block)) return null;
   
+  const gridRef = useRef<HTMLDivElement>(null);
   const columns = block.columns || 4;
   const maxProducts = block.max_products || 8;
   
@@ -1699,18 +1965,28 @@ const BasicProductGrid: React.FC<{
                       block.text_alignment === 'right' ? 'justify-end' :
                       'justify-start';
   
+  // 높이가 설정된 경우 DOM에 직접 적용
+  useEffect(() => {
+    if (gridRef.current && block.height) {
+      const heightValue = block.height_unit === 'visible' ? 
+        `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바를 제외한 보이는 영역의 퍼센트
+        `${block.height}${block.height_unit || 'px'}`;
+      gridRef.current.style.height = heightValue;
+      gridRef.current.style.minHeight = heightValue;
+      gridRef.current.style.maxHeight = heightValue;
+    }
+  }, [block.height, block.height_unit]);
+  
   return (
     <div 
+      ref={gridRef}
       className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-${Math.min(columns, 4)} gap-4 ${justifyClass}`}
       style={{
-        height: block.height ? `${block.height}px` : undefined,
-        minHeight: block.height ? `${block.height}px` : undefined,
-        maxHeight: block.height ? `${block.height}px` : undefined,
         overflow: block.height ? 'hidden' : 'visible'
       }}
     >
       {/* 제품 등록 플레이스홀더 */}
-      <div className={`${block.height ? 'h-full' : 'aspect-square'} bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center`}>
+      <div className={`${block.height ? 'h-full' : 'aspect-square'} bg-gray-100 flex items-center justify-center`}>
         <span className="text-gray-500 text-sm">+ 제품 추가</span>
       </div>
       
@@ -1738,11 +2014,14 @@ const BasicBannerRenderer: React.FC<{
   // 높이가 설정된 경우 DOM에 직접 적용
   useEffect(() => {
     if (bannerRef.current && block.height) {
-      bannerRef.current.style.height = `${block.height}px`;
-      bannerRef.current.style.minHeight = `${block.height}px`;
-      bannerRef.current.style.maxHeight = `${block.height}px`;
+      const heightValue = block.height_unit === 'visible' ? 
+        `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바를 제외한 보이는 영역의 퍼센트
+        `${block.height}${block.height_unit || 'px'}`;
+      bannerRef.current.style.height = heightValue;
+      bannerRef.current.style.minHeight = heightValue;
+      bannerRef.current.style.maxHeight = heightValue;
     }
-  }, [block.height]);
+  }, [block.height, block.height_unit]);
   
   // 높이가 명시적으로 설정된 경우 모든 높이 관련 클래스 제거
   const bannerHeight = block.height ? '' : (
@@ -2008,11 +2287,14 @@ const BasicFeaturedRenderer: React.FC<{
   // 높이가 설정된 경우 DOM에 직접 적용
   useEffect(() => {
     if (featuredRef.current && block.height) {
-      featuredRef.current.style.height = `${block.height}px`;
-      featuredRef.current.style.minHeight = `${block.height}px`;
-      featuredRef.current.style.maxHeight = `${block.height}px`;
+      const heightValue = block.height_unit === 'visible' ? 
+        `calc((100vh - 64px) * ${block.height} / 100)` : // 네비게이션 바를 제외한 보이는 영역의 퍼센트
+        `${block.height}${block.height_unit || 'px'}`;
+      featuredRef.current.style.height = heightValue;
+      featuredRef.current.style.minHeight = heightValue;
+      featuredRef.current.style.maxHeight = heightValue;
     }
-  }, [block.height]);
+  }, [block.height, block.height_unit]);
   
   // 높이가 명시적으로 설정된 경우 Tailwind 클래스 대신 인라인 스타일 사용
   const featuredSize = block.height ? '' : (
