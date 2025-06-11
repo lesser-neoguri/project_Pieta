@@ -181,7 +181,15 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
       
       // 동일한 스타일 설정
       const sidebarWidth = '384px'; // w-96 = 24rem = 384px
-      const transition = 'margin-left 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+      const transition = 'margin-left 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+
+      const timers: NodeJS.Timeout[] = [];
+      const clearTransition = (element: HTMLElement) => {
+        const id = setTimeout(() => {
+          element.style.transition = '';
+        }, 500);
+        timers.push(id);
+      };
       
       if (navbar) {
         if (sidebarOpen) {
@@ -195,6 +203,7 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           navbar.style.width = '100vw';
           navbar.style.maxWidth = '100vw';
         }
+        clearTransition(navbar);
       }
       
       if (mainContent) {
@@ -209,15 +218,17 @@ export default function StoreDesignForm({ storeId }: { storeId: string }) {
           mainContent.style.width = '100vw';
           mainContent.style.maxWidth = '100vw';
         }
+        clearTransition(mainContent);
       }
     }
 
     // 컴포넌트 언마운트 시 스타일 초기화
     return () => {
+      timers.forEach(clearTimeout);
       if (typeof document !== 'undefined') {
         const navbar = document.querySelector('nav') as HTMLElement;
         const mainContent = document.querySelector('main') as HTMLElement;
-        
+
         [navbar, mainContent].forEach(element => {
           if (element) {
             element.style.marginLeft = '';
