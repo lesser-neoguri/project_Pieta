@@ -98,7 +98,6 @@ export const getContainerStyles = (design: any, sidebarOpen: boolean = false): R
     transform: 'translateX(-50%)',
     marginLeft: 0,
     marginRight: 0,
-    transition: 'width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), padding 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
   };
 };
 
